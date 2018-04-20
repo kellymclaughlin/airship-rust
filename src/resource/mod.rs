@@ -113,7 +113,8 @@ pub trait Webmachine {
 
     // In the presence of an @If-Modified-Since@ headerfn returning a @Just@ value from 'lastModifed' allows
     // the server to halt with @304 Not Modified@ if appropriate.
-    fn last_modified(&self) -> Option<String> {  //TODO: use time type equiv (Maybe UTCTime)
+    fn last_modified(&self) -> Option<String> {
+        //TODO: use time type equiv (Maybe UTCTime)
         None
     }
 
@@ -171,14 +172,14 @@ pub trait Webmachine {
         false
     }
 
-
     /* When handling @POST@ requestsfn the value returned determines whether
      * to treat the request as a @PUT@, a @PUT@ and a redirectfn or a plain
      * @POST@. See the documentation for 'PostResponse' for more information.
      * The default implemetation returns a 'PostProcess' with an empty
      * handler.
      */
-    fn process_post(&self) -> () { //TODO should return equiv of (PostResponse m)
+    fn process_post(&self) -> () {
+        //TODO should return equiv of (PostResponse m)
         ()
     }
 
@@ -213,10 +214,9 @@ pub trait Webmachine {
     }
 }
 
-
-pub struct Resource  {
+pub struct Resource {
     pub error_responses: ErrorResponses,
-    pub decision_trace: Vec<String>
+    pub decision_trace: Vec<String>,
 }
 
 impl Webmachine for Resource {

@@ -10,10 +10,10 @@ use hyper::Method::*;
 //     then b12 r
 //     else lift $ halt HTTP.status503
 
-fn b13<R: Webmachine>(r: R) -> () {
-    // trace "b13"
+pub fn b13<R: Webmachine>(r: &mut R) -> () {
+    r.trace("b13".to_string());
     match r.service_available() {
-        true => (),
+        true => b12(r),
         false => ()
     }
 }
@@ -36,8 +36,8 @@ fn b13<R: Webmachine>(r: R) -> () {
 //         then b11 r
 //         else lift $ halt HTTP.status501
 
-fn b12<R: Webmachine>(r: R) -> () {
-    // trace "b12"
+fn b12<R: Webmachine>(r: &mut R) -> () {
+    r.trace("b12".to_string());
     // known method
     let request_method = Get;
     let known_methods = vec![ Get, Post, Head, Put,
