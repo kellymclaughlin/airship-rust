@@ -1,6 +1,9 @@
-use hyper::header::EntityTag;
+use hyper::Uri;
 use hyper::Method;
 use hyper::Method::{Get, Head, Options};
+use hyper::header::EntityTag;
+use hyper::server::{Request};
+
 use mime;
 use mime::Mime;
 
@@ -128,7 +131,7 @@ pub trait Webmachine {
     }
 
     // Returns @400 Bad Request@ if true. Default: false.
-    fn malformed_request(&self) -> bool {
+    fn malformed_request(&self, _req: &Request) -> bool {
         false
     }
 
@@ -199,7 +202,7 @@ pub trait Webmachine {
     }
 
     // Returns @414 Request URI Too Long@ if true. Default: false.
-    fn uri_too_long(&self) -> bool {
+    fn uri_too_long(&self, _uri: &Uri) -> bool {
         false
     }
 

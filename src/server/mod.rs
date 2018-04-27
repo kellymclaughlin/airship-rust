@@ -2,11 +2,10 @@ extern crate hyper;
 extern crate futures;
 
 // use resource::{Resource, Webmachine};
-
-use futures::future::Future;
+use futures::Future;
 
 use hyper::server::{Http, Request, Response, Service};
-use hyper::{ Method, StatusCode};
+use hyper::{Method, StatusCode};
 
 struct Airship {
     route_spec: String
@@ -17,10 +16,12 @@ impl Service for Airship {
     type Request = Request;
     type Response = Response;
     type Error = hyper::Error;
-
-    type Future = Box<Future<Item=Self::Response, Error=Self::Error>>;
+    // type Future = FutureResult<Response, hyper::Error>;
+    type Future = Box<Future<Item=Response, Error=hyper::Error>>;
 
     fn call(&self, req: Request) -> Self::Future {
+        //TODO: match request against route_spec
+        //TODO: If matched then run decision tree
          match (req.method(), req.path()) {
             (&Method::Get, "/") => {
                 Box::new(futures::future::ok(

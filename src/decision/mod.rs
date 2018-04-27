@@ -1,78 +1,82 @@
+extern crate futures;
+extern crate hyper;
+
 use resource::Webmachine;
+
+use futures::Future;
+
 use hyper::Method::*;
+use hyper::StatusCode;
+use hyper::header::{Allow, Header};
+use hyper::server::{Request, Response};
+
+type BoxedFuture = Box<Future<Item = Response, Error = hyper::Error>>;
+
+fn halt(status_code: StatusCode) -> BoxedFuture {
+    Box::new(futures::future::ok(
+        Response::new().with_status(status_code),
+    ))
+}
+
+fn halt_with_header<H: Header>(status_code: StatusCode, hdr: H) -> BoxedFuture {
+    Box::new(futures::future::ok(
+        Response::new().with_status(status_code).with_header(hdr),
+    ))
+}
+
+fn response(r: Response) -> BoxedFuture {
+    Box::new(futures::future::ok(r))
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // B column
 ///////////////////////////////////////////////////////////////////////////////
 
-// available <- lift serviceAvailable
-// if available
-//     then b12 r
-//     else lift $ halt HTTP.status503
-
-pub fn b13<R: Webmachine>(r: &mut R) -> () {
+pub fn b13<R: Webmachine>(r: &mut R, _req: &Request) -> BoxedFuture {
     r.trace("b13".to_string());
     match r.service_available() {
-        true => b12(r),
-        false => ()
+        true => b12(r, _req),
+        false => halt(StatusCode::ServiceUnavailable),
     }
 }
 
-// b12 r@Resource{..} = do
-//     trace "b12"
-//     -- known method
-//     req <- lift request
-//     let knownMethods = [ HTTP.methodGet
-//                        , HTTP.methodPost
-//                        , HTTP.methodHead
-//                        , HTTP.methodPut
-//                        , HTTP.methodDelete
-//                        , HTTP.methodTrace
-//                        , HTTP.methodConnect
-//                        , HTTP.methodOptions
-//                        , HTTP.methodPatch
-//                        ]
-//     if requestMethod req `elem` knownMethods
-//         then b11 r
-//         else lift $ halt HTTP.status501
-
-fn b12<R: Webmachine>(r: &mut R) -> () {
+fn b12<R: Webmachine>(r: &mut R, req: &Request) -> BoxedFuture {
     r.trace("b12".to_string());
     // known method
-    let request_method = Get;
-    let known_methods = vec![ Get, Post, Head, Put,
-                              Delete, Trace, Connect,
-                              Options, Patch ];
+    let request_method = req.method();
+    let known_methods = vec![Get, Post, Head, Put, Delete, Trace, Connect, Options, Patch];
     let mut iter = known_methods.iter();
-    match iter.find(|&m| m == &request_method) {
-        None => (),
-        Some(_) => ()
+    match iter.find(|&m| m == request_method) {
+        None => halt(StatusCode::NotImplemented),
+        Some(_) => b11(r, req),
     }
 }
 
-// b11 r@Resource{..} = do
-//     trace "b11"
-//     long <- lift uriTooLong
-//     if long
-//         then lift $ halt HTTP.status414
-//         else b10 r
+fn b11<R: Webmachine>(r: &mut R, req: &Request) -> BoxedFuture {
+    r.trace("b11".to_string());
+    match r.uri_too_long(req.uri()) {
+        true => halt(StatusCode::UriTooLong),
+        false => b10(r, req),
+    }
+}
 
-// b10 r@Resource{..} = do
-//     trace "b10"
-//     req <- lift request
-//     allowed <- lift allowedMethods
-//     if requestMethod req `elem` allowed
-//         then b09 r
-//         else do
-//             lift $ addResponseHeader ("Allow",  intercalate "," allowed)
-//             lift $ halt HTTP.status405
+fn b10<R: Webmachine>(r: &mut R, req: &Request) -> BoxedFuture {
+    r.trace("b10".to_string());
+    let request_method = req.method();
+    let allowed_methods = r.allowed_methods();
+    match allowed_methods.iter().find(|&m| m == request_method) {
+        None => halt_with_header(StatusCode::MethodNotAllowed, Allow(allowed_methods)),
+        Some(_) => b09(r, req),
+    }
+}
 
-// b09 r@Resource{..} = do
-//     trace "b09"
-//     malformed <- lift malformedRequest
-//     if malformed
-//         then lift $ halt HTTP.status400
-//         else b08 r
+fn b09<R: Webmachine>(r: &mut R, req: &Request) -> BoxedFuture {
+    r.trace("b09".to_string());
+    match r.malformed_request(req) {
+        true => halt(StatusCode::BadRequest),
+        false => halt(StatusCode::BadRequest), //b08(r, req)
+    }
+}
 
 // b08 r@Resource{..} = do
 //     trace "b08"
@@ -567,7 +571,6 @@ fn b12<R: Webmachine>(r: &mut R) -> () {
 //     if requestMethod req /= HTTP.methodPatch
 //        then o18 r
 //        else lift patchContentTypesAccepted >>= negotiateContentTypesAccepted >> o20 r
-
 
 // o14 r@Resource{..} = do
 //     trace "o14"
