@@ -1,20 +1,48 @@
 extern crate futures;
 extern crate hyper;
+extern crate mime;
+
+use std::rc::Rc;
 
 use resource::Webmachine;
+use types::{RequestState,
+            is_response_empty,
+            request_time,
+            set_response_header,
+            trace};
 
 use futures::Future;
 
-use hyper::Method::*;
-use hyper::StatusCode;
-use hyper::header::{Allow, Header};
+use hyper::Method;
+use hyper::{Body, StatusCode};
+use hyper::header::*;
 use hyper::server::{Request, Response};
+use mime::Mime;
+
+header! { (AirshipTrace, "Airship-Trace") => [String] }
+header! { (AirshipQuip, "Airship-Quip") => [String] }
 
 type BoxedFuture = Box<Future<Item = Response, Error = hyper::Error>>;
 
+pub fn traverse<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    b13(r, req, state)
+}
+
 fn halt(status_code: StatusCode) -> BoxedFuture {
     Box::new(futures::future::ok(
-        Response::new().with_status(status_code),
+        Response::new().with_status(status_code)
+    ))
+}
+
+fn halt_with_response(status_code: StatusCode, state: &mut RequestState) -> BoxedFuture {
+    let trace = state.decision_trace.join(",");
+    let quip = String::from("blame me if inappropriate");
+    let response = Response::new()
+        .with_status(status_code)
+        .with_header(AirshipTrace(trace))
+        .with_header(AirshipQuip(quip));
+    Box::new(futures::future::ok(
+        response
     ))
 }
 
@@ -24,109 +52,142 @@ fn halt_with_header<H: Header>(status_code: StatusCode, hdr: H) -> BoxedFuture {
     ))
 }
 
-fn response(r: Response) -> BoxedFuture {
-    Box::new(futures::future::ok(r))
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 // B column
 ///////////////////////////////////////////////////////////////////////////////
 
-pub fn b13<R: Webmachine>(r: &mut R, _req: &Request) -> BoxedFuture {
-    r.trace("b13".to_string());
+fn b13<R: Webmachine>(r: &R, _req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "b13");
     match r.service_available() {
-        true => b12(r, _req),
-        false => halt(StatusCode::ServiceUnavailable),
+        true => b12(r, _req, state),
+        false => halt(StatusCode::ServiceUnavailable)
     }
 }
 
-fn b12<R: Webmachine>(r: &mut R, req: &Request) -> BoxedFuture {
-    r.trace("b12".to_string());
+fn b12<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "b12");
     // known method
     let request_method = req.method();
-    let known_methods = vec![Get, Post, Head, Put, Delete, Trace, Connect, Options, Patch];
+    let known_methods = vec![Method::Get,
+                             Method::Post,
+                             Method::Head,
+                             Method::Put,
+                             Method::Delete,
+                             Method::Trace,
+                             Method::Connect,
+                             Method::Options,
+                             Method::Patch];
     let mut iter = known_methods.iter();
     match iter.find(|&m| m == request_method) {
-        None => halt(StatusCode::NotImplemented),
-        Some(_) => b11(r, req),
+        None    => halt(StatusCode::NotImplemented),
+        Some(_) => b11(r, req, state)
     }
 }
 
-fn b11<R: Webmachine>(r: &mut R, req: &Request) -> BoxedFuture {
-    r.trace("b11".to_string());
+fn b11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "b11");
     match r.uri_too_long(req.uri()) {
         true => halt(StatusCode::UriTooLong),
-        false => b10(r, req),
+        false => b10(r, req, state)
     }
 }
 
-fn b10<R: Webmachine>(r: &mut R, req: &Request) -> BoxedFuture {
-    r.trace("b10".to_string());
+fn b10<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "b10");
     let request_method = req.method();
     let allowed_methods = r.allowed_methods();
     match allowed_methods.iter().find(|&m| m == request_method) {
         None => halt_with_header(StatusCode::MethodNotAllowed, Allow(allowed_methods)),
-        Some(_) => b09(r, req),
+        Some(_) => b09(r, req, state)
     }
 }
 
-fn b09<R: Webmachine>(r: &mut R, req: &Request) -> BoxedFuture {
-    r.trace("b09".to_string());
+fn b09<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "b09");
     match r.malformed_request(req) {
         true => halt(StatusCode::BadRequest),
-        false => halt(StatusCode::BadRequest), //b08(r, req)
+        false => b08(r, req, state)
     }
 }
 
-// b08 r@Resource{..} = do
-//     trace "b08"
-//     authorized <- lift isAuthorized
-//     if authorized
-//         then b07 r
-//         else lift $ halt HTTP.status401
+fn b08<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "b08");
+    match r.is_authorized(req) {
+        true => b07(r, req, state),
+        false => halt(StatusCode::Unauthorized)
+    }
+}
 
-// b07 r@Resource{..} = do
-//     trace "b07"
-//     forbid <- lift forbidden
-//     if forbid
-//         then lift $ halt HTTP.status403
-//         else b06 r
+fn b07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "b07");
+    match r.forbidden(req) {
+        true => halt(StatusCode::Forbidden),
+        false => b06(r, req, state)
+    }
+}
 
-// b06 r@Resource{..} = do
-//     trace "b06"
-//     validC <- lift validContentHeaders
-//     if validC
-//         then b05 r
-//         else lift $ halt HTTP.status501
+fn b06<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "b06");
+    match r.valid_content_headers(req) {
+        true => b05(r, req, state),
+        false => halt(StatusCode::NotImplemented)
+    }
+}
 
-// b05 r@Resource{..} = do
-//     trace "b05"
-//     known <- lift knownContentType
-//     if known
-//         then b04 r
-//         else lift $ halt HTTP.status415
+fn b05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "b05");
+    match r.known_content_type(req) {
+        true => b04(r, req, state),
+        false => halt(StatusCode::UnsupportedMediaType)
+    }
+}
 
-// b04 r@Resource{..} = do
-//     trace "b04"
-//     large <- lift entityTooLarge
-//     if large
-//         then lift $ halt HTTP.status413
-//         else b03 r
+fn b04<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "b04");
+    match r.entity_too_large(req) {
+        true => halt(StatusCode::PayloadTooLarge),
+        false => b03(r, req, state)
+    }
+}
 
-// b03 r@Resource{..} = do
-//     trace "b03"
-//     req <- lift request
-//     allowed <- lift allowedMethods
-//     if requestMethod req == HTTP.methodOptions
-//         then do
-//             lift $ addResponseHeader ("Allow",  intercalate "," allowed)
-//             lift $ halt HTTP.status204
-//         else c03 r
+fn b03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "b03");
+    match req.method() {
+        Method::Options => {
+            let allowed_methods = r.allowed_methods();
+            halt_with_header(StatusCode::Created, Allow(allowed_methods))
+        },
+        _ =>
+            c03(r, req, state)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- C column
 // ------------------------------------------------------------------------------
 
+fn map_accept_media(_provided: Vec<(Mime, Box<Fn(&Request) -> Body>)>, _accept: &Vec<QualityItem<Mime>>) -> Option<(Mime, Box<Fn(&Request) -> Body>)> {
+    Some((mime::TEXT_PLAIN, Box::new(|_| { Body::from("ok") })))
+}
+
+fn c04<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, accept_header: &Accept) -> BoxedFuture {
+    trace(state, "c04");
+    let provided = r.content_types_provided();
+    let result = Rc::new(map_accept_media(provided, &accept_header.0));
+    // let result = map_accept_media(provided, &accept_header.0);
+    match *result {
+        Some((ref accept_type, ref _resource)) => {
+            // let accept_type_clone = Rc::new(accept_type);
+            set_response_header(state, ContentType(Mime::clone(&accept_type)));
+            // set_matched_content_type(state, Rc::clone(&result));
+            let r_clone = Rc::clone(&result);
+            state.matched_content_type = r_clone;
+            d04(r, req, state)
+        },
+        None => halt(StatusCode::NotAcceptable)
+    }
+}
 // c04 r@Resource{..} = do
 //     trace "c04"
 //     req <- lift request
@@ -149,348 +210,360 @@ fn b09<R: Webmachine>(r: &mut R, req: &Request) -> BoxedFuture {
 //         modify (\fs -> fs { _contentType = Just res })
 //         d04 r
 
-// c03 r@Resource{..} = do
-//     trace "c03"
-//     req <- lift request
-//     let reqHeaders = requestHeaders req
-//     case lookup HTTP.hAccept reqHeaders of
-//         (Just _h) ->
-//             c04 r
-//         Nothing ->
-//             d04 r
+fn c03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "c03");
+    match req.headers().get::<Accept>() {
+        Some(ahdr) => c04(r, req, state, &ahdr),
+        None => d04(r, req, state)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- D column
 // ------------------------------------------------------------------------------
 
-// d05 r@Resource{..} = do
-//     trace "d05"
-//     langAvailable <- lift languageAvailable
-//     if langAvailable
-//         then e05 r
-//         else lift $ halt HTTP.status406
+fn d05<R: Webmachine, H: Header>(r: &R, req: &Request, state: &mut RequestState, accept_lang_header: &H) -> BoxedFuture {
+    trace(state, "d05");
+    if r.language_available(accept_lang_header) {
+        e05(r, req, state)
+    } else {
+        halt(StatusCode::NotAcceptable)
+    }
+}
 
-// d04 r@Resource{..} = do
-//     trace "d04"
-//     req <- lift request
-//     let reqHeaders = requestHeaders req
-//     case lookup HTTP.hAcceptLanguage reqHeaders of
-//         (Just _h) ->
-//             d05 r
-//         Nothing ->
-//             e05 r
+fn d04<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "d04");
+    match req.headers().get::<AcceptLanguage>() {
+        Some(alhdr) => d05(r, req, state, alhdr),
+        None        => e05(r, req, state)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- E column
 // ------------------------------------------------------------------------------
 
-// e06 r@Resource{..} = do
-//     trace "e06"
-//     -- TODO: charset negotiation
-//     f06 r
+fn e06<R: Webmachine, H: Header>(r: &R, req: &Request, state: &mut RequestState, _accept_charset_header: &H) -> BoxedFuture {
+    trace(state, "e06");
+    //TODO: Implement charset negotiation
+    f06(r, req, state)
+}
 
-// e05 r@Resource{..} = do
-//     trace "e05"
-//     req <- lift request
-//     let reqHeaders = requestHeaders req
-//     case lookup hAcceptCharset reqHeaders of
-//         (Just _h) ->
-//             e06 r
-//         Nothing ->
-//             f06 r
+fn e05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "e05");
+    match req.headers().get::<AcceptCharset>() {
+        Some(achdr) => e06(r, req, state, achdr),
+        None => f06(r, req, state)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- F column
 // ------------------------------------------------------------------------------
 
-// f07 r@Resource{..} = do
-//     trace "f07"
-//     -- TODO: encoding negotiation
-//     g07 r
+fn f07<R: Webmachine, H: Header>(r: &R, req: &Request, state: &mut RequestState, _accept_encoding_header: &H) -> BoxedFuture {
+    trace(state, "f07");
+    //TODO: Implement encoding negotiation
+    f06(r, req, state)
+}
 
-// f06 r@Resource{..} = do
-//     trace "f06"
-//     req <- lift request
-//     let reqHeaders = requestHeaders req
-//     case lookup hAcceptEncoding reqHeaders of
-//         (Just _h) ->
-//             f07 r
-//         Nothing ->
-//             g07 r
+fn f06<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "f06");
+    match req.headers().get::<AcceptEncoding>() {
+        Some(aehdr) => f07(r, req, state, aehdr),
+        None => g07(r, req, state)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- G column
 // ------------------------------------------------------------------------------
 
-// g11 (IfMatch ifMatch) r@Resource{..} = do
-//     trace "g11"
-//     let etags = parseEtagList ifMatch
-//     if null etags
-//         then lift $ halt HTTP.status412
-//         else h10 r
+fn g11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, etags: &Vec<EntityTag>) -> BoxedFuture {
+    trace(state, "g11");
+    match etags.is_empty() {
+        true => halt(StatusCode::PreconditionFailed),
+        false => h10(r, req, state)
+    }
+}
 
-// g09 ifMatch r@Resource{..} = do
-//     trace "g09"
-//     case ifMatch of
-//         -- TODO: should we be stripping whitespace here?
-//         (IfMatch "*") ->
-//             h10 r
-//         _ ->
-//             g11 ifMatch r
+fn g09<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, if_match: &IfMatch) -> BoxedFuture {
+    trace(state, "g09");
+    match if_match {
+        IfMatch::Any => h10(r, req, state),
+        IfMatch::Items(etags) => g11(r, req, state, etags)
+    }
+}
 
-// g08 r@Resource{..} = do
-//     trace "g08"
-//     req <- lift request
-//     let reqHeaders = requestHeaders req
-//     case IfMatch <$> lookup hIfMatch reqHeaders of
-//         (Just h) ->
-//             g09 h r
-//         Nothing ->
-//             h10 r
+fn g08<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "g08");
+    match req.headers().get::<IfMatch>() {
+        Some(imhdr) => g09(r, req, state, &imhdr),
+        None => h10(r, req, state)
+    }
+}
 
-// g07 r@Resource{..} = do
-//     trace "g07"
-//     -- TODO: set Vary headers
-//     exists <- lift resourceExists
-//     if exists
-//         then g08 r
-//         else h07 r
+fn g07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "g07");
+    // TODO: set Vary headers
+    match r.resource_exists() {
+        true  => g08(r, req, state),
+        false => h07(r, req, state)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- H column
 // ------------------------------------------------------------------------------
 
-// h12 r@Resource{..} = do
-//     trace "h12"
-//     modified <- lift lastModified
-//     parsedDate <- lift $ requestHeaderDate hIfUnmodifiedSince
-//     let maybeGreater = do
-//             lastM <- modified
-//             headerDate <- parsedDate
-//             return (lastM > headerDate)
-//     if maybeGreater == Just True
-//         then lift $ halt HTTP.status412
-//         else i12 r
+fn h12<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "h12");
+    let m_if_unmod_since = req.headers().get::<IfUnmodifiedSince>();
+    let m_last_modified = r.last_modified();
+    match (m_if_unmod_since, m_last_modified) {
+        (Some(if_unmod_since), Some(last_modified))
+            if last_modified > **if_unmod_since => halt(StatusCode::PreconditionFailed),
+        _                                       => i12(r, req, state)
+    }
+}
 
-// h11 r@Resource{..} = do
-//     trace "h11"
-//     parsedDate <- lift $ requestHeaderDate hIfUnmodifiedSince
-//     if isJust parsedDate
-//         then h12 r
-//         else i12 r
+fn h11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "h11");
+    // TODO: Revisit this to understand how hyper handles invalid HttpDate values
+    // let m_header_str = req.headers().get_raw("if-unmodified-since");
+    // let valid_date = match m_header_str {
+    //     Some(header_raw) => Header::parse_header(header_raw).is_ok(),
+    //     None             => &false
+    // };
+    let valid_date = true;
+    match valid_date {
+        true  => h12(r, req, state),
+        false => i12(r, req, state)
+    }
+}
 
-// h10 r@Resource{..} = do
-//     trace "h10"
-//     req <- lift request
-//     let reqHeaders = requestHeaders req
-//     case lookup hIfUnmodifiedSince reqHeaders of
-//         (Just _h) ->
-//             h11 r
-//         Nothing ->
-//             i12 r
+fn h10<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "h10");
+    match req.headers().has::<IfUnmodifiedSince>() {
+        true => h11(r, req, state),
+        false => i12(r, req, state)
+    }
+}
 
-// h07 r@Resource {..} = do
-//     trace "h07"
-//     req <- lift request
-//     let reqHeaders = requestHeaders req
-//     case lookup hIfMatch reqHeaders of
-//         -- TODO: should we be stripping whitespace here?
-//         (Just "*") ->
-//             lift $ halt HTTP.status412
-//         _ ->
-//             i07 r
+fn h07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "h07");
+    match req.headers().get::<IfMatch>() {
+        Some(IfMatch::Any) => halt(StatusCode::PreconditionFailed),
+        _                  => i07(r, req, state)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- I column
 // ------------------------------------------------------------------------------
 
-// i13 ifNoneMatch r@Resource{..} = do
-//     trace "i13"
-//     case ifNoneMatch of
-//         -- TODO: should we be stripping whitespace here?
-//         (IfNoneMatch "*") ->
-//             j18 r
-//         _ ->
-//             k13 ifNoneMatch r
+fn i13<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, if_none_match: &IfNoneMatch) -> BoxedFuture {
+    trace(state, "i13");
+    match if_none_match {
+        IfNoneMatch::Any          => j18(r, req, state),
+        IfNoneMatch::Items(etags) => k13(r, req, state, &etags)
+    }
+}
 
-// i12 r@Resource{..} = do
-//     trace "i12"
-//     req <- lift request
-//     let reqHeaders = requestHeaders req
-//     case IfNoneMatch <$> lookup hIfNoneMatch reqHeaders of
-//         (Just h) ->
-//             i13 h r
-//         Nothing ->
-//             l13 r
+fn i12<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "i12");
+    match req.headers().get::<IfNoneMatch>() {
+        Some(inmhdr) => i13(r, req, state, inmhdr),
+        None => l13(r, req, state)
+    }
+}
 
-// i07 r = do
-//     trace "i07"
-//     req <- lift request
-//     if requestMethod req == HTTP.methodPut
-//         then i04 r
-//         else k07 r
 
-// i04 r@Resource{..} = do
-//     trace "i04"
-//     moved <- lift movedPermanently
-//     case moved of
-//         (Just loc) -> do
-//             lift $ addResponseHeader ("Location", loc)
-//             lift $ halt HTTP.status301
-//         Nothing ->
-//             p03 r
+fn i07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "i07");
+    match req.method() {
+        Method::Put => i04(r, req, state),
+        _           => k07(r, req, state)
+    }
+}
+
+fn i04<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "i04");
+    match r.moved_permanently() {
+        Some(location) => {
+            set_response_header(state, Location::new(location));
+            halt(StatusCode::MovedPermanently)
+        },
+        None => p03(r, req, state)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- J column
 // ------------------------------------------------------------------------------
 
-// j18 _ = do
-//     trace "j18"
-//     req <- lift request
-//     let getOrHead = [ HTTP.methodGet
-//                     , HTTP.methodHead
-//                     ]
-//     if requestMethod req `elem` getOrHead
-//         then lift $ halt HTTP.status304
-//         else lift $ halt HTTP.status412
+fn j18<R: Webmachine>(_r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "j18");
+    match req.method() {
+        Method::Get  => halt(StatusCode::NotModified),
+        Method::Head => halt(StatusCode::NotModified),
+        _            => halt(StatusCode::PreconditionFailed)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- K column
 // ------------------------------------------------------------------------------
 
-// k13 (IfNoneMatch ifNoneMatch) r@Resource{..} = do
-//     trace "k13"
-//     let etags = parseEtagList ifNoneMatch
-//     if null etags
-//         then l13 r
-//         else j18 r
+fn k13<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, etags: &Vec<EntityTag>) -> BoxedFuture {
+    trace(state, "k13");
+    match etags.is_empty() {
+        true  => l13(r, req, state),
+        false => j18(r, req, state)
+    }
+}
 
-// k07 r@Resource{..} = do
-//     trace "k07"
-//     prevExisted <- lift previouslyExisted
-//     if prevExisted
-//         then k05 r
-//         else l07 r
+fn k07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "k07");
+    match r.previously_existed() {
+        true  => k05(r, req, state),
+        false => l07(r, req, state)
+    }
+}
 
-// k05 r@Resource{..} = do
-//     trace "k05"
-//     moved <- lift movedPermanently
-//     case moved of
-//         (Just loc) -> do
-//             lift $ addResponseHeader ("Location", loc)
-//             lift $ halt HTTP.status301
-//         Nothing ->
-//             l05 r
+fn k05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "k05");
+    match r.moved_permanently() {
+        Some(location) => {
+            set_response_header(state, Location::new(location));
+            halt(StatusCode::MovedPermanently)
+        },
+        None           => l05(r, req, state)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- L column
 // ------------------------------------------------------------------------------
 
-// l17 r@Resource{..} = do
-//     trace "l17"
-//     parsedDate <- lift $ requestHeaderDate HTTP.hIfModifiedSince
-//     modified <- lift lastModified
-//     let maybeGreater = do
-//             lastM <- modified
-//             ifModifiedSince <- parsedDate
-//             return (lastM > ifModifiedSince)
-//     if maybeGreater == Just True
-//         then m16 r
-//         else lift $ halt HTTP.status304
+fn l17<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "l17");
+    let m_if_mod_since = req.headers().get::<IfModifiedSince>();
+    let m_last_modified = r.last_modified();
+    match (m_if_mod_since, m_last_modified) {
+        (Some(if_mod_since), Some(last_modified))
+            if **if_mod_since > last_modified => m16(r, req, state),
+        _                                     => halt(StatusCode::NotModified)
+    }
+}
 
-// l15 r@Resource{..} = do
-//     trace "l15"
-//     parsedDate <- lift $ requestHeaderDate HTTP.hIfModifiedSince
-//     now <- lift requestTime
-//     let maybeGreater = (> now) <$> parsedDate
-//     if maybeGreater == Just True
-//         then m16 r
-//         else l17 r
+fn l15<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "l15");
+    let m_if_mod_since = req.headers().get::<IfModifiedSince>();
+    match m_if_mod_since {
+        Some(if_mod_since)
+            if **if_mod_since > request_time(state) => m16(r, req, state),
+        _                                           => l17(r, req, state)
+    }
+}
 
-// l14 r@Resource{..} = do
-//     trace "l14"
-//     req <- lift request
-//     let reqHeaders = requestHeaders req
-//         dateHeader = lookup HTTP.hIfModifiedSince reqHeaders
-//         validDate = isJust (dateHeader >>= parseRfc1123Date)
-//     if validDate
-//         then l15 r
-//         else m16 r
+fn l14<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "l14");
+    // TODO: Revisit this to understand how hyper handles invalid HttpDate values
+    // let valid_date = req.headers()
+    //     .get_raw("if-modified-since")
+    //     .and_then(str::parse::<HttpDate>())
+    //     .is_some();
+    let valid_date = true;
+    match valid_date {
+        true  => l15(r, req, state),
+        false => m16(r, req, state)
+    }
+}
 
-// l13 r@Resource{..} = do
-//     trace "l13"
-//     req <- lift request
-//     let reqHeaders = requestHeaders req
-//     case lookup HTTP.hIfModifiedSince reqHeaders of
-//         (Just _h) ->
-//             l14 r
-//         Nothing ->
-//             m16 r
+fn l13<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "l13");
+    match req.headers().has::<IfModifiedSince>() {
+        true  => l14(r, req, state),
+        false => m16(r, req, state)
+    }
+}
 
-// l07 r = do
-//     trace "l07"
-//     req <- lift request
-//     if requestMethod req == HTTP.methodPost
-//         then m07 r
-//         else lift $ halt HTTP.status404
+fn l07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "l07");
+    match req.method() {
+        Method::Post => m07(r, req, state),
+        _            => halt(StatusCode::NotFound)
+    }
+}
 
-// l05 r@Resource{..} = do
-//     trace "l05"
-//     moved <- lift movedTemporarily
-//     case moved of
-//         (Just loc) -> do
-//             lift $ addResponseHeader ("Location", loc)
-//             lift $ halt HTTP.status307
-//         Nothing ->
-//             m05 r
+fn l05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "l05");
+    match r.moved_temporarily() {
+        Some(location) => {
+            set_response_header(state, Location::new(location));
+            halt(StatusCode::TemporaryRedirect)
+        },
+        None           => m05(r, req, state)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- M column
 // ------------------------------------------------------------------------------
 
-// m20 r@Resource{..} = do
-//     trace "m20"
-//     deleteAccepted <- lift deleteResource
-//     if deleteAccepted
-//         then do
-//             completed <- lift deleteCompleted
-//             if completed
-//                 then o20 r
-//                 else lift $ halt HTTP.status202
-//         else lift $ halt HTTP.status500
+fn m20<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "m20");
+    match (r.delete_resource(req), r.delete_completed()) {
+        (true, true)  => o20(r, req, state),
+        (true, false) => halt(StatusCode::Accepted),
+        _             => halt(StatusCode::InternalServerError)
+    }
+}
 
-// m16 r = do
-//     trace "m16"
-//     req <- lift request
-//     if requestMethod req == HTTP.methodDelete
-//         then m20 r
-//         else n16 r
+fn m16<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "m16");
+    match req.method() {
+        Method::Delete => m20(r, req, state),
+        _              => n16(r, req, state)
+    }
+}
 
-// m07 r@Resource{..} = do
-//     trace "m07"
-//     allowMissing <- lift allowMissingPost
-//     if allowMissing
-//         then n11 r
-//         else lift $ halt HTTP.status404
 
-// m05 r = do
-//     trace "m05"
-//     req <- lift request
-//     if requestMethod req == HTTP.methodPost
-//         then n05 r
-//         else lift $ halt HTTP.status410
+fn m07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "m07");
+    match r.allow_missing_post() {
+        true  => n11(r, req, state),
+        false => halt(StatusCode::NotFound)
+    }
+}
+
+
+fn m05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "m05");
+    match req.method() {
+        Method::Post => n05(r, req, state),
+        _            => halt(StatusCode::Gone)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- N column
 // ------------------------------------------------------------------------------
 
-// n16 r = do
-//     trace "n16"
-//     req <- lift request
-//     if requestMethod req == HTTP.methodPost
-//         then n11 r
-//         else o16 r
+fn n16<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "n16");
+    match req.method() {
+        Method::Post => n11(r, req, state),
+        _            => o16(r, req, state)
+    }
+}
 
+fn n11<R: Webmachine>(_r: &R, _req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "n11");
+    // TODO: Implement POST handling
+    halt(StatusCode::Created)
+}
 // n11 r@Resource{..} = trace "n11" >> lift processPost >>= flip processPostAction r
 
 // create :: Monad m => [Text] -> Resource m -> FlowStateT m ()
@@ -513,88 +586,103 @@ fn b09<R: Webmachine>(r: &mut R, req: &Request) -> BoxedFuture {
 //     lift $ addResponseHeader ("Location", locBs)
 //     lift $ halt HTTP.status303
 
-// n05 r@Resource{..} = do
-//     trace "n05"
-//     allow <- lift allowMissingPost
-//     if allow
-//         then n11 r
-//         else lift $ halt HTTP.status410
+fn n05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "n05");
+    match r.allow_missing_post() {
+        true  => n11(r, req, state),
+        false => halt(StatusCode::Gone)
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- O column
 // ------------------------------------------------------------------------------
 
-// o20 r = do
-//     trace "o20"
-//     body <- lift getResponseBody
-//     -- ResponseBody is a little tough to make an instance of 'Eq',
-//     -- so we just use a pattern match
-//     case body of
-//         Empty   -> lift $ halt HTTP.status204
-//         _       -> o18 r
+fn o20<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "o20");
+    match is_response_empty(state) {
+        true  => halt(StatusCode::Created),
+        false => o18(r, req, state)
+    }
+}
 
-// o18 r@Resource{..} = do
-//     trace "o18"
-//     multiple <- lift multipleChoices
-//     if multiple
-//         then lift $ halt HTTP.status300
-//         else do
-//             -- TODO: set etag, expiration, etc. headers
-//             req <- lift request
-//             let getOrHead = [ HTTP.methodGet
-//                             , HTTP.methodHead
-//                             ]
-//             when (requestMethod req `elem` getOrHead) $ do
-//                 m <- _contentType <$> get
-//                 (cType, body) <- case m of
-//                     Nothing -> do
-//                         provided <- lift contentTypesProvided
-//                         return (head provided)
-//                     Just (cType, body) ->
-//                         return (cType, body)
-//                 b <- lift body
-//                 lift $ putResponseBody b
-//                 lift $ addResponseHeader ("Content-Type", renderHeader cType)
-//             writeCacheTags r
-//             lift $ halt HTTP.status200
 
-// o16 r = do
-//     trace "o16"
-//     req <- lift request
-//     if requestMethod req == HTTP.methodPut
-//         then o14 r
-//         else o17 r
+fn o18<R: Webmachine>(r: &R, _req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "o18");
+    match r.multiple_choices() {
+        true  => halt(StatusCode::MultipleChoices),
+        false => {
+            //  -- TODO: set etag, expiration, etc. headers
+            //  req <- lift request
+            //  let getOrHead = [ HTTP.methodGet
+            //                  , HTTP.methodHead
+            //                  ]
+            //  when (requestMethod req `elem` getOrHead) $ do
+            //      m <- _contentType <$> get
+            //      (cType, body) <- case m of
+            //          Nothing -> do
+            //              provided <- lift contentTypesProvided
+            //              return (head provided)
+            //          Just (cType, body) ->
+            //              return (cType, body)
+            //      b <- lift body
+            //      lift $ putResponseBody b
+            //      lift $ addResponseHeader ("Content-Type", renderHeader cType)
+            //      writeCacheTags r
+            // set_response_header(state, AirshipTrace(trace));
+            halt_with_response(StatusCode::Ok, state)
+        }
+    }
+}
 
-// o17 r@Resource{..} = do
-//     trace "o17"
-//     req <- lift request
-//     if requestMethod req /= HTTP.methodPatch
-//        then o18 r
+fn o16<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "o16");
+    match req.method() {
+        Method::Put => o14(r, req, state),
+        _           => o17(r, req, state)
+    }
+}
+
+fn o17<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "o17");
+    match req.method() {
+        Method::Patch => {
 //        else lift patchContentTypesAccepted >>= negotiateContentTypesAccepted >> o20 r
+            o20(r, req, state)
+        },
+        _             => o18(r, req, state)
+    }
+}
 
-// o14 r@Resource{..} = do
-//     trace "o14"
-//     conflict <- lift isConflict
-//     if conflict
-//         then lift $ halt HTTP.status409
+fn o14<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "o14");
+    match r.is_conflict() {
+        true  => halt(StatusCode::Conflict),
+        false => {
 //         else lift contentTypesAccepted >>= negotiateContentTypesAccepted >> p11 r
+            p11(r, req, state)
+        }
+    }
+}
 
 // ------------------------------------------------------------------------------
 // -- P column
 // ------------------------------------------------------------------------------
 
-// p11 r = do
-//     trace "p11"
-//     headers <- lift getResponseHeaders
-//     case lookup HTTP.hLocation headers of
-//         (Just _) ->
-//             lift $ halt HTTP.status201
-//         _ ->
-//             o20 r
+fn p11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "p11");
+    match req.headers().has::<Location>() {
+        true => halt(StatusCode::Created),
+        false => o20(r, req, state)
+    }
+}
 
-// p03 r@Resource{..} = do
-//     trace "p03"
-//     conflict <- lift isConflict
-//     if conflict
-//         then lift $ halt HTTP.status409
-//         else lift contentTypesAccepted >>= negotiateContentTypesAccepted >> p11 r
+fn p03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+    trace(state, "p03");
+    match r.is_conflict() {
+        true => halt(StatusCode::Conflict),
+        false =>
+        // else lift contentTypesAccepted >>= negotiateContentTypesAccepted >> p11 r
+            p11(r, req, state)
+    }
+}

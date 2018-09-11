@@ -1,6 +1,7 @@
+#![allow(unused_variables)]
+
 use std::collections::HashMap;
 
-use hyper::Method::*;
 use itertools::Itertools;
 use radix_trie::Trie;
 use resource::Webmachine;
@@ -11,46 +12,41 @@ enum BoundOrUnbound {
     RestUnbound,
 }
 
-struct Route(Vec<BoundOrUnbound>);
+pub struct Route(Vec<BoundOrUnbound>);
 
-fn route_text(&route: Route) -> String {
+fn route_text(route: &Route) -> String {
     route
         .0
         .iter()
-        .map(|&part| boundOrUnboundText!(part))
+        .map(|part| boundOrUnboundText(part))
         .intersperse(",".to_string())
         .collect::<Vec<_>>()
-        .concat();
+        .concat()
 }
 
-fn boundOrUnboundText(&bou: BoundOrUnbound) -> String {
-    match bou {
-        BoundOrUnbound::Bound(t) => t,
-        BoundOrUnbound::Var(t) => String::from(":") + t,
-        BoundOrUnbound::RestUnbound => String::from("*"),
+fn boundOrUnboundText(bou: &BoundOrUnbound) -> String {
+    match *bou {
+        BoundOrUnbound::Bound(ref t) => t.clone(),
+        BoundOrUnbound::Var(ref t) => String::from(":") + &t,
+        BoundOrUnbound::RestUnbound => String::from("*")
     }
 }
 
-// instance IsString Route where
-//     fromString s = Route [Bound (fromString s)]
+pub struct RoutedResource<R: Webmachine>(pub Route, pub R);
 
-// data RoutedResource m
-//     = RoutedResource Route (Resource m)
-struct RoutedResource(Route, Webmachine);
-
-enum RouteLeaf {
-    RouteMatch(RoutedResource, Vec<String>),
+pub enum RouteLeaf<R: Webmachine> {
+    RouteMatch(RoutedResource<R>, Vec<String>),
     RVar,
-    RouteMatchOrVar(RoutedResource, Vec<String>),
-    Wildcard(RoutedResource),
+    RouteMatchOrVar(RoutedResource<R>, Vec<String>),
+    Wildcard(RoutedResource<R>),
 }
 
 /*
  * Turns the list of routes in a 'RoutingSpec' into a 'Trie' for efficient
  * routing
  */
-pub fn run_router(routes: RoutingSpec) -> Trie<String, RouteLeaf> {
-    to_trie(routes);
+pub fn run_router<R: Webmachine>(routes: &RoutingSpec<R>) -> Trie<String, RouteLeaf<R>> {
+    to_trie(routes)
 }
 
 /*
@@ -59,32 +55,34 @@ pub fn run_router(routes: RoutingSpec) -> Trie<String, RouteLeaf> {
  * routes specified first are favored over any subsequent
  * specifications.
  */
-fn to_trie(routes: RoutingSpec) -> Trie<String, RouteLeaf> {
+fn to_trie<R: Webmachine>(routes: &RoutingSpec<R>) -> Trie<String, RouteLeaf<R>> {
     // L.foldl' insertOrReplace Trie.empty
-    routes
-        .iter()
-        .fold(Trie::new(), |acc, x| insert_or_replace(acc, x));
+    // routes
+    //     .iter()
+    //     .fold(Trie::new(), |acc, x| insert_or_replace(acc, x))
+    unimplemented!()
 }
 
-fn insert_or_replace(
-    t: Trie<String, RouteLeaf>,
-    kv: (String, RouteLeaf),
-) -> Trie<String, RouteLeaf> {
+fn insert_or_replace<R: Webmachine>(
+    t: Trie<String, RouteLeaf<R>>,
+    kv: (String, RouteLeaf<R>),
+) -> Trie<String, RouteLeaf<R>> {
     // insertOrReplace t (k, v) =
     // let newV = maybe v (mergeValues v) $ Trie.lookup k t
     //     in Trie.insert k newV t
+    unimplemented!()
 }
 
-fn merge_values(l1: RouteLeaf, l2: RouteLeaf) -> RouteLeaf {
+fn merge_values<R: Webmachine>(l1: RouteLeaf<R>, l2: RouteLeaf<R>) -> RouteLeaf<R> {
     match (l1, l2) {
-        (Wildcard(x), _) => Wildcard(x),
-        (_, Wildcard(y)) => Wildcard(y),
-        (RVar, RVar) => RVar,
-        (RVar, RouteMatch(x, y)) => RouteMatchOrVar(x, y),
-        (RouteMatch(_, _), RouteMatch(x, y)) => RouteMatch(x, y),
-        (RouteMatch(x, y), RVar) => RouteMatchOrVar(x, y),
-        (RouteMatchOrVar(_, _), RouteMatch(x, y)) => RouteMatchOrVar(x, y),
-        (RouteMatchOrVar(x, y), _) => RouteMatchOrVar(x, y),
+        (RouteLeaf::Wildcard(x), _) => RouteLeaf::Wildcard(x),
+        (_, RouteLeaf::Wildcard(y)) => RouteLeaf::Wildcard(y),
+        (RouteLeaf::RVar, RouteLeaf::RVar) => RouteLeaf::RVar,
+        (RouteLeaf::RVar, RouteLeaf::RouteMatch(x, y)) => RouteLeaf::RouteMatchOrVar(x, y),
+        (RouteLeaf::RouteMatch(_, _), RouteLeaf::RouteMatch(x, y)) => RouteLeaf::RouteMatch(x, y),
+        (RouteLeaf::RouteMatch(x, y), RouteLeaf::RVar) => RouteLeaf::RouteMatchOrVar(x, y),
+        (RouteLeaf::RouteMatchOrVar(_, _), RouteLeaf::RouteMatch(x, y)) => RouteLeaf::RouteMatchOrVar(x, y),
+        (RouteLeaf::RouteMatchOrVar(x, y), _) => RouteLeaf::RouteMatchOrVar(x, y),
         (_, v) => v,
     }
 }
@@ -108,12 +106,12 @@ pub fn root() -> Route {
 // will capture all URLs of the form @\/blog\/$date\/$post@, and add @date@ and @post@ to the 'routingParams'
 // contained within the resource this route maps to.
 pub fn var(s: String) -> Route {
-    Route(vec![Var(t)])
+    Route(vec![BoundOrUnbound::Var(s)])
 }
 
 // Captures a wildcard route. For example,
 pub fn star() -> Route {
-    Route(vec![RestUnbound])
+    Route(vec![BoundOrUnbound::RestUnbound])
 }
 
 /*
@@ -168,30 +166,32 @@ pub fn star() -> Route {
 //                , MonadWriter [(B.ByteString, RouteLeaf m)]
 //                )
 // type RoutePair = <R: Webmachine>(String, r:R);
-type RouteMatch = Option<(String, RouteLeaf, String)>;
-type ResourceMatch = Option<(RoutedResource, (HashMap<String, String>, Vec<String>))>;
-struct RoutingSpec(Vec<(String, Webmachine)>);
+type RouteMatch<R: Webmachine> = Option<(String, RouteLeaf<R>, String)>;
+pub type ResourceMatch<R: Webmachine> = Option<(RoutedResource<R>, (HashMap<String, String>, Vec<String>))>;
+pub struct RoutingSpec<R: Webmachine>(pub Vec<(String, R)>);
 
 // route :: Trie (RouteLeaf a)
 //       -> BC8.ByteString
 //       -> Maybe (RoutedResource a, (HashMap Text Text, [Text]))
 // route routes pInfo = let matchRes = Trie.match routes pInfo
 //                      in matchRoute' routes matchRes mempty Nothing
-fn route(
-    routes: Trie<String, RouteLeaf>,
-    pInfo: String,
-) -> Option<(RoutedResource, (HashMap<String, String>, Vec<String>))> {
-    let matchRes = Trie.lookup(routes, pInfo);
-    matchRoute(routes, matchRes, vec![], None);
+pub fn route<R: Webmachine>(
+    routes: Trie<String, RouteLeaf<R>>,
+    pInfo: String
+// ) -> Option<(RoutedResource<R>, (HashMap<String, String>, Vec<String>))> {
+) -> ResourceMatch<R> {
+    // let matchRes = routes.get(&pInfo);
+    // match_route(routes, matchRes, vec![], None)
+    unimplemented!();
 }
 
-fn matchRoute(
-    routes: Trie<String, RouteLeaf>,
-    matched: RouteMatch,
+fn match_route<R: Webmachine>(
+    routes: Trie<String, RouteLeaf<R>>,
+    matched: RouteMatch<R>,
     params: Vec<String>,
     dispatch: Option<String>,
-) -> ResourceMatch {
-    None;
+) -> ResourceMatch<R> {
+    unimplemented!();
 }
 // matchRoute' :: Trie (RouteLeaf a)
 //             -> Maybe (B.ByteString, RouteLeaf a, B.ByteString)

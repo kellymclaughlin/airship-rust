@@ -1,17 +1,12 @@
-use hyper::Uri;
-use hyper::Method;
+#![allow(unused_variables)]
+
+use hyper::{Body, Method, Uri};
 use hyper::Method::{Get, Head, Options};
-use hyper::header::EntityTag;
-use hyper::server::{Request};
+use hyper::header::{EntityTag, Header, HttpDate};
+use hyper::server::Request;
 
 use mime;
 use mime::Mime;
-
-// type ErrorResponses m = Monad m => Map HTTP.Status [(MediaType, Webmachine m ResponseBody)]
-
-// type ErrorResponses = Map HTTP.Status [(MediaType, ResponseBody)]
-pub type ErrorResponses = String;
-pub type ResponseBody = String;
 
 pub trait Webmachine {
     // Whether to allow HTTP POSTs to a missing resource. Default: false.
@@ -32,7 +27,7 @@ pub trait Webmachine {
      * An association list of 'MediaType's and 'Webmachine' actions that
      * correspond to the accepted @Content-Type@ values that this resource
      * can accept in a request body. If a @Content-Type@ header is present
-     * but not accounted for in 'contentTypesAccepted', processing will
+     * but not accounted for in 'content_types_accepted', processing will
      * halt with @415 Unsupported Media Type@. Otherwise, the corresponding
      * 'Webmachine' action will be executed and processing will continue.
      */
@@ -46,13 +41,13 @@ pub trait Webmachine {
      * matches the @Accept@ header. Should there be no match, processing
      * will halt with @406 Not Acceptable@.
      */
-    fn content_types_provided(&self) -> Vec<(Mime, ResponseBody)> {
-        vec![(mime::TEXT_PLAIN, String::from(""))]
+    fn content_types_provided(&self) -> Vec<(Mime, Box<Fn(&Request) -> Body>)> {
+        vec![(mime::TEXT_PLAIN, Box::new(move |_x:&Request| Body::empty()))]
     }
 
     /*
      * When a @DELETE@ request is enacted (via a @True@ value returned from
-     * 'deleteResource'), a @False@ value returns a @202 Accepted@ response.
+     * 'delete_resource'), a @False@ value returns a @202 Accepted@ response.
      * Returning @True@ will continue processing, usually ending up with a
      * @204 No Content@ response. Default: False.
      */
@@ -64,12 +59,12 @@ pub trait Webmachine {
      * When processing a @DELETE@ request, a @True@ value allows processing
      *  to continue. Returns @500 Forbidden@ if False. Default: false.
      */
-    fn delete_resource(&self) -> bool {
+    fn delete_resource(&self, _req: &Request) -> bool {
         false
     }
 
     // Returns @413 Request Entity Too Large@ if true. Default: false.
-    fn entity_too_large(&self) -> bool {
+    fn entity_too_large(&self, _req: &Request) -> bool {
         false
     }
 
@@ -77,7 +72,7 @@ pub trait Webmachine {
      * Checks if the given request is allowed to access this resource.
      * Returns @403 Forbidden@ if true. Default: false.
      */
-    fn forbidden(&self) -> bool {
+    fn forbidden(&self, _req: &Request) -> bool {
         false
     }
 
@@ -85,7 +80,7 @@ pub trait Webmachine {
      * If this returns a non-'Nothing' 'ETag', its value will be added to
      * every HTTP response in the @ETag:@ field.
      */
-    fn generate_etag(&self) -> Option<EntityTag> {
+    fn generate_etag(&self, _req: &Request) -> Option<EntityTag> {
         None
     }
 
@@ -96,7 +91,7 @@ pub trait Webmachine {
     }
 
     // Returns @401 Unauthorized@ if false. Default: true.
-    fn is_authorized(&self) -> bool {
+    fn is_authorized(&self, _req: &Request) -> bool {
         true
     }
 
@@ -110,14 +105,13 @@ pub trait Webmachine {
 
     // Returns @415 Unsupported Media Type@ if false. We recommend you use the 'contentTypeMatches' helper functionfn which accepts a list of
     // 'MediaType' valuesfn so as to simplify proper MIME type handling. Default: true.
-    fn known_content_type(&self) -> bool {
+    fn known_content_type(&self, _req: &Request) -> bool {
         true
     }
 
     // In the presence of an @If-Modified-Since@ headerfn returning a @Just@ value from 'lastModifed' allows
     // the server to halt with @304 Not Modified@ if appropriate.
-    fn last_modified(&self) -> Option<String> {
-        //TODO: use time type equiv (Maybe UTCTime)
+    fn last_modified(&self) -> Option<HttpDate> {
         None
     }
 
@@ -126,7 +120,7 @@ pub trait Webmachine {
      * function returns @False@, processing will halt with
      * @406 Not Acceptable@.
      */
-    fn language_available(&self) -> bool {
+    fn language_available<H: Header>(&self, accept_lang_header: &H) -> bool {
         true
     }
 
@@ -145,7 +139,7 @@ pub trait Webmachine {
         None
     }
 
-    // Like 'movedPermanently'fn except with a @307 Moved Temporarily@ response.
+    // Like 'moved_permanently'fn except with a @307 Moved Temporarily@ response.
     fn moved_temporarily(&self) -> Option<String> {
         None
     }
@@ -167,15 +161,15 @@ pub trait Webmachine {
     }
 
     /*
-     * When processing a request for which 'resourceExists' returned
-     * @False@, returning @True@ here allows the 'movedPermanently' and
-     * 'movedTemporarily' functions to process the request.
+     * When processing a request for which 'resource_exists' returned
+     * @False@, returning @True@ here allows the 'moved_permanently' and
+     * 'moved_temporarily' functions to process the request.
      */
     fn previously_existed(&self) -> bool {
         false
     }
 
-    /* When handling @POST@ requestsfn the value returned determines whether
+    /* When handling @POST@ requests the value returned determines whether
      * to treat the request as a @PUT@, a @PUT@ and a redirectfn or a plain
      * @POST@. See the documentation for 'PostResponse' for more information.
      * The default implemetation returns a 'PostProcess' with an empty
@@ -207,24 +201,11 @@ pub trait Webmachine {
     }
 
     // Returns @501 Not Implemented@ if false. Default: true.
-    fn valid_content_headers(&self) -> bool {
+    fn valid_content_headers(&self, _req: &Request) -> bool {
         true
     }
-
-    // Helper function to trace decision tree traversal
-    fn trace(&mut self, _t: String) -> &Self {
-        self
-    }
 }
 
-pub struct Resource {
-    pub error_responses: ErrorResponses,
-    pub decision_trace: Vec<String>,
-}
+pub struct Resource;
 
-impl Webmachine for Resource {
-    fn trace(&mut self, t: String) -> &Self {
-        self.decision_trace.push(t);
-        self
-    }
-}
+impl Webmachine for Resource {}

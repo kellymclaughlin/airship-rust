@@ -1,5 +1,5 @@
 [package]
-name = "airship-rust"
+name = "airship"
 version = "0.1.0"
 authors = ["Kelly McLaughlin <kelly@kelly-mclaughlin.com>"]
 

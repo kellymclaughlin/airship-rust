@@ -1,14 +1,18 @@
 extern crate hyper;
 extern crate futures;
 
-// use resource::{Resource, Webmachine};
-use futures::Future;
+use resource::{Resource};
+use decision;
+use route;
+use route::RoutingSpec;
+use types::RequestState;
 
+use futures::Future;
 use hyper::server::{Http, Request, Response, Service};
-use hyper::{Method, StatusCode};
+use hyper::StatusCode;
 
 struct Airship {
-    route_spec: String
+    route_spec: RoutingSpec<Resource>
 }
 
 impl Service for Airship {
@@ -22,18 +26,23 @@ impl Service for Airship {
     fn call(&self, req: Request) -> Self::Future {
         //TODO: match request against route_spec
         //TODO: If matched then run decision tree
-         match (req.method(), req.path()) {
-            (&Method::Get, "/") => {
-                Box::new(futures::future::ok(
-                    Response::new().with_body("Try POSTing data to /echo")
-                ))
+        // match route::route(route::run_router(&self.route_spec), req.path().to_string()) {
+        //     Some(routed_resource) => {
+        //         let r = (routed_resource.0).1;
+        //         decision::traverse::<Resource>(&r, &req, &mut RequestState::new())
+        //     },
+        //     None =>  {
+        //         Box::new(futures::future::ok(
+        //             Response::new().with_status(StatusCode::NotFound)
+        //         ))
+        //     }
+        // }
+        match req.path() {
+            "/test/route" => {
+                let r = Resource {};
+                decision::traverse::<Resource>(&r, &req, &mut RequestState::new())
             },
-             (&Method::Post, "/echo") => {
-                Box::new(futures::future::ok(
-                    Response::new().with_body("POST data received")
-                ))
-            },
-            _ => {
+            _ =>  {
                 Box::new(futures::future::ok(
                     Response::new().with_status(StatusCode::NotFound)
                 ))
@@ -44,9 +53,6 @@ impl Service for Airship {
 
 pub fn run() {
     let addr = "127.0.0.1:3000".parse().unwrap();
-    // let airship = Airship {
-    //     route_spec: String::from("haute/route")
-    // };
-    let server = Http::new().bind(&addr, || Ok(Airship { route_spec: String::from("haute/route")})).unwrap();
+    let server = Http::new().bind(&addr, || Ok(Airship { route_spec: RoutingSpec(vec![(String::from("/test/route"), Resource {})]) })).unwrap();
     server.run().unwrap();
 }
