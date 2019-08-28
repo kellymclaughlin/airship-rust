@@ -1,9 +1,9 @@
 use std::time::SystemTime;
 use std::rc::Rc;
 
-use hyper::Body;
+use hyper::{Body, Request, Response};
 use hyper::header::*;
-use hyper::server::{Request, Response};
+
 use mime::Mime;
 
 // type ErrorResponses = Map HTTP.Status [(MediaType, ResponseBody)]

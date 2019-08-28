@@ -1,9 +1,4 @@
-#[macro_use]
-extern crate hyper;
-extern crate futures;
-extern crate itertools;
-extern crate mime;
-extern crate radix_trie;
+#[macro_use] extern crate hyper;
 
 pub mod decision;
 pub mod resource;

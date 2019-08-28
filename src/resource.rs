@@ -1,10 +1,7 @@
 #![allow(unused_variables)]
 
-use hyper::{Body, Method, Uri};
-use hyper::Method::{Get, Head, Options};
-use hyper::header::{EntityTag, Header, HttpDate};
-use hyper::server::Request;
-
+use hyper::{Body, Method, Request, Uri};
+use hyper::header::*;
 use mime;
 use mime::Mime;
 
@@ -20,7 +17,7 @@ pub trait Webmachine {
      * @501 Not Implemented@ is returned.
      */
     fn allowed_methods(&self) -> Vec<Method> {
-        vec![Get, Head, Options]
+        vec![Method::Get, Method::Head, Method::Options]
     }
 
     /*
@@ -206,6 +203,7 @@ pub trait Webmachine {
     }
 }
 
+#[derive(Clone)]
 pub struct Resource;
 
 impl Webmachine for Resource {}

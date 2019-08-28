@@ -1,23 +1,18 @@
-extern crate futures;
-extern crate hyper;
-extern crate mime;
-
 use std::rc::Rc;
 
-use resource::Webmachine;
-use types::{RequestState,
-            is_response_empty,
-            request_time,
-            set_response_header,
-            trace};
-
 use futures::Future;
-
-use hyper::Method;
-use hyper::{Body, StatusCode};
+use hyper::{Body, Method, Request, Response, StatusCode};
 use hyper::header::*;
-use hyper::server::{Request, Response};
 use mime::Mime;
+
+use crate::resource::Webmachine;
+use crate::types::{
+    RequestState,
+    is_response_empty,
+    request_time,
+    set_response_header,
+    trace
+};
 
 header! { (AirshipTrace, "Airship-Trace") => [String] }
 header! { (AirshipQuip, "Airship-Quip") => [String] }
@@ -37,8 +32,10 @@ fn halt(status_code: StatusCode) -> BoxedFuture {
 fn halt_with_response(status_code: StatusCode, state: &mut RequestState) -> BoxedFuture {
     let trace = state.decision_trace.join(",");
     let quip = String::from("blame me if inappropriate");
+
     let response = Response::new()
         .with_status(status_code)
+        .with_header(Server::new("hyper/0.11.27"))
         .with_header(AirshipTrace(trace))
         .with_header(AirshipQuip(quip));
     Box::new(futures::future::ok(
@@ -156,7 +153,7 @@ fn b03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     match req.method() {
         Method::Options => {
             let allowed_methods = r.allowed_methods();
-            halt_with_header(StatusCode::Created, Allow(allowed_methods))
+            halt_with_header(StatusCode::NoContent, Allow(allowed_methods))
         },
         _ =>
             c03(r, req, state)
