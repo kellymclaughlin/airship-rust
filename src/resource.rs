@@ -167,14 +167,13 @@ pub trait Webmachine {
     }
 
     /* When handling @POST@ requests the value returned determines whether
-     * to treat the request as a @PUT@, a @PUT@ and a redirectfn or a plain
+     * to treat the request as a @PUT@, a @PUT@ and a redirect or a plain
      * @POST@. See the documentation for 'PostResponse' for more information.
      * The default implemetation returns a 'PostProcess' with an empty
      * handler.
      */
-    fn process_post(&self) -> () {
-        //TODO should return equiv of (PostResponse m)
-        ()
+    fn process_post(&self) -> PostResponse {
+        PostResponse::PostProcess(vec![])
     }
 
     /*
@@ -207,3 +206,26 @@ pub trait Webmachine {
 pub struct Resource;
 
 impl Webmachine for Resource {}
+
+
+/// Used when processing POST requests so as to handle the outcome of the binary
+/// decisions between handling a POST as a create request and whether to
+/// redirect after the POST is done.  Credit for this idea goes to Richard
+/// Wallace (purefn) on Webcrank.
+///
+/// For processing the POST, an association list of `Mime`s and `Webmachine`
+/// actions are required that correspond to the accepted `Content-Type` values
+/// that this resource can accept in a request body.  If a `Content-Type` header
+/// is present but not accounted for, processing will halt with `415 Unsupported
+/// Media Type`.
+pub enum PostResponse
+{
+    /// Treat this request as a `PUT`.
+    PostCreate(Vec<String>),
+    /// Treat this request as a `PUT`, then redirect.
+    PostCreateRedirect(Vec<String>),
+    /// Process as a `POST`, but don't redirect.
+    PostProcess(Vec<(Mime, fn(&Request))>),
+    /// Process and redirect.
+    PostProcessRedirect(Vec<(Mime, fn(&Request) -> String)>)
+}

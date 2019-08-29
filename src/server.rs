@@ -16,17 +16,16 @@ struct Airship<R>
 where
     R: Webmachine + Clone
 {
-    routes: RoutingTrie<R>
+    routes: Arc<RoutingTrie<R>>
 }
 
 impl<R> Airship<R>
 where
     R: Webmachine + Clone
 {
-    fn new(routes: Arc<RoutingSpec<R>>) -> Airship<R> {
-        let routes_clone = Arc::clone(&routes);
+    fn new(routes: Arc<RoutingTrie<R>>) -> Airship<R> {
         Airship {
-            routes: RoutingTrie::from(*routes_clone)
+            routes: Arc::clone(&routes)
         }
     }
 }
@@ -42,7 +41,7 @@ where
     type Future = Box<Future<Item=Response, Error=hyper::Error>>;
 
     fn call(&self, req: Request) -> Self::Future {
-        match route::route(&self.routes, req.path().to_string()) {
+        match route::route(&(*self.routes), req.path().to_string()) {
             Some(routed_resource) => {
                 let r = &(routed_resource.0).1;
                 decision::traverse::<R>(&r, &req, &mut RequestState::new())
@@ -56,25 +55,14 @@ where
     }
 }
 
-pub fn run<R>(addr: SocketAddr, routes: Arc<Vec<(&str, R)>>)
+pub fn run<R: 'static>(addr: SocketAddr, routes: &Vec<(&str, R)>)
 where
     R: Webmachine + Clone
 {
-    // let addr = "127.0.0.1:3000".parse().unwrap();
-    // let routes = [
-    //     ("test </> place", Resource {}),
-    //     ("test </> route </> ::name::", Resource {}),
-    // ];
-    // let app = Airship {
-    //     route_spec: RoutingSpec(routes)
-    // };
-    // let server = Http::new().bind(&addr, || Ok(Airship::new(RoutingSpec(vec![(String::from("/test/route"), Resource {})])))).unwrap();
-    // let spec_clone = routing_spec.clone();
-    let routing_spec = RoutingSpec(Arc::clone(routes));
-    // let app = Airship::new(routing_spec);
+    let routing_spec = RoutingSpec(routes.clone());
+    let routing_trie = Arc::new(RoutingTrie::from(routing_spec));
     let server = Http::new()
-        .bind(&addr, move || Ok(Airship::new(routing_spec)))
-        // .bind(&addr, move || Ok(app))
+        .bind(&addr, move || Ok(Airship::new(Arc::clone(&routing_trie))))
         .unwrap();
     server.run().unwrap();
 }

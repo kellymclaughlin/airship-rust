@@ -68,12 +68,6 @@ pub enum RouteLeaf<R: Webmachine> {
     Wildcard(RoutedResource<R>),
 }
 
-type RouteMatch<'a, R: Webmachine> =
-    Option<(Box<String>, &'a RouteLeaf<R>, Box<String>)>;
-pub type ResourceMatch<'a, R: Webmachine> =
-    Option<(&'a RoutedResource<R>, (HashMap<String, String>, Vec<String>))>;
-
-
 /// Turns the list of routes in a 'RoutingSpec' into a 'Trie' for efficient
 /// routing
 ///
@@ -105,23 +99,6 @@ impl<'a, R> From<RoutingSpec<'a, R>> for RoutingTrie<R> where R: Webmachine {
     }
 }
 
-// pub fn run_router<R: Webmachine>(spec: RoutingSpec<R>) -> Trie<String, RouteLeaf<R>> {
-//     // Convert the route string into a vector of `Route`s
-//     let routes: Vec<(Route, R)> =
-//         spec
-//         .0
-//         .into_iter()
-//         .map(|(route_str, res)| {
-//             (Route::from(route_str), res)
-//         })
-//         .collect();
-
-//     let leaves = routes.into_iter().flat_map(route_leaves).collect();
-
-//     to_trie(leaves)
-// }
-
-
 fn route_leaves<R: Webmachine>(route_pair: (Route, R)) -> Vec<(String, RouteLeaf<R>)> {
     let (route, resource) = route_pair;
     let fold_acc = (String::new(), Vec::new(), Vec::new(), false);
@@ -143,30 +120,6 @@ fn route_leaves<R: Webmachine>(route_pair: (Route, R)) -> Vec<(String, RouteLeaf
     routes.push((final_key, final_leaf));
     routes
 }
-
-    // let (key, routes, vars, isWild) = foldl routeFoldFun ("", [], [], False) (getRoute k)
-    //     key' = if BC8.null key then "/"
-    //            else key
-    //     ctor = if isWild
-    //               then Wildcard (RoutedResource k v)
-    //               else RouteMatch (RoutedResource k v) vars
-    // tell $ (key', ctor) : routes
-    // where
-    //     routeFoldFun (kps, rt, vs, False) (Bound x) =
-    //         (B.concat [kps, "/", encodeUtf8 x], rt, vs, False)
-    //     routeFoldFun (kps, rt, vs, False) (Var x) =
-    //         let partKey = Base64.encode $ B.concat [kps, "var"]
-    //             rt' = (kps, RVar) : rt
-    //         in (partKey, rt', x:vs, False)
-    //     routeFoldFun (kps, rt, vs, False) RestUnbound =
-    //         (kps, rt, vs, True)
-    //     routeFoldFun (kps, rt, vs, True) _ =
-    //         (kps, rt, vs, True)
-
-
-// fn get_route<R>(route_pair: (Route, &R)) -> Route {
-//     route_pair.0
-// }
 
 fn route_fold_fun<R: Webmachine>(fold_acc: (String, Vec<(String, RouteLeaf<R>)>, Vec<String>, bool),
                   bou: &BoundOrUnbound
@@ -276,7 +229,7 @@ pub fn star() -> Route {
 pub fn route<'a, R: Webmachine>(
     routes: &'a RoutingTrie<R>,
     path_info: String
-) -> ResourceMatch<'a, R> {
+) -> Option<(&'a RoutedResource<R>, (HashMap<String, String>, Vec<String>))> {
     let match_result = routes.0.prefix_match(&path_info);
     match_route(&routes.0, match_result, vec![], None)
 }
@@ -291,10 +244,10 @@ fn dispatch_list(dispatch: Option<String>, matched: &String) -> Vec<String> {
 
 fn match_route<'a, R: Webmachine>(
     routes: &'a Trie<String, RouteLeaf<R>>,
-    matched: RouteMatch<'a, R>,
+    matched: Option<(Box<String>, &'a RouteLeaf<R>, Box<String>)>,
     params: Vec<String>,
     dispatch: Option<String>,
-) -> ResourceMatch<'a, R> {
+) -> Option<(&'a RoutedResource<R>, (HashMap<String, String>, Vec<String>))> {
     match matched {
         // Nothing even partially matched the route
         None => {

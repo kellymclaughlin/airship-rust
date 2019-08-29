@@ -164,6 +164,9 @@ fn b03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- C column
 // ------------------------------------------------------------------------------
 
+// TODO: Do naive matching instead of hardcoding here.
+// TODO: This is insufficient. Implement more robust handling like Haskell's
+// mapAcceptMedia from Network.HTTP.Media
 fn map_accept_media(_provided: Vec<(Mime, Box<Fn(&Request) -> Body>)>, _accept: &Vec<QualityItem<Mime>>) -> Option<(Mime, Box<Fn(&Request) -> Body>)> {
     Some((mime::TEXT_PLAIN, Box::new(|_| { Body::from("ok") })))
 }
