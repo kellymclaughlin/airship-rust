@@ -28,7 +28,7 @@ pub trait Webmachine {
      * halt with @415 Unsupported Media Type@. Otherwise, the corresponding
      * 'Webmachine' action will be executed and processing will continue.
      */
-    fn content_types_accepted(&self) -> Vec<(Mime, ())> {
+    fn content_types_accepted(&self) -> Vec<(Mime, fn(&Request))> {
         vec![]
     }
 
@@ -38,8 +38,8 @@ pub trait Webmachine {
      * matches the @Accept@ header. Should there be no match, processing
      * will halt with @406 Not Acceptable@.
      */
-    fn content_types_provided(&self) -> Vec<(Mime, Box<Fn(&Request) -> Body>)> {
-        vec![(mime::TEXT_PLAIN, Box::new(move |_x:&Request| Body::empty()))]
+    fn content_types_provided(&self) -> Vec<(Mime, fn(&Request) -> Body)> {
+        vec![(mime::TEXT_PLAIN, |_x:&Request| Body::empty())]
     }
 
     /*
@@ -153,7 +153,7 @@ pub trait Webmachine {
      * As 'contentTypesAccepted', but checked and executed specifically in
      * the case of a PATCH request.
      */
-    fn patch_content_types_accepted(&self) -> Vec<(Mime, ())> {
+    fn patch_content_types_accepted(&self) -> Vec<(Mime, fn(&Request))> {
         vec![]
     }
 
@@ -172,7 +172,7 @@ pub trait Webmachine {
      * The default implemetation returns a 'PostProcess' with an empty
      * handler.
      */
-    fn process_post(&self) -> PostResponse {
+    fn process_post(&self, _req: &Request) -> PostResponse {
         PostResponse::PostProcess(vec![])
     }
 

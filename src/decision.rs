@@ -1,11 +1,14 @@
-use std::rc::Rc;
+//! This module contains the implementation of the Webmachine decision graph
+//! which is available
+//! [here](https://raw.githubusercontent.com/wiki/Webmachine/webmachine/images/http-headers-status-v3.png)
 
 use futures::Future;
 use hyper::{Body, Method, Request, Response, StatusCode};
 use hyper::header::*;
+use itertools::Itertools;
 use mime::Mime;
 
-use crate::resource::Webmachine;
+use crate::resource::{PostResponse, Webmachine};
 use crate::types::{
     RequestState,
     is_response_empty,
@@ -45,7 +48,9 @@ fn halt_with_response(status_code: StatusCode, state: &mut RequestState) -> Boxe
 
 fn halt_with_header<H: Header>(status_code: StatusCode, hdr: H) -> BoxedFuture {
     Box::new(futures::future::ok(
-        Response::new().with_status(status_code).with_header(hdr),
+        Response::new()
+            .with_status(status_code)
+            .with_header(hdr)
     ))
 }
 
@@ -56,9 +61,10 @@ fn halt_with_header<H: Header>(status_code: StatusCode, hdr: H) -> BoxedFuture {
 
 fn b13<R: Webmachine>(r: &R, _req: &Request, state: &mut RequestState) -> BoxedFuture {
     trace(state, "b13");
-    match r.service_available() {
-        true => b12(r, _req, state),
-        false => halt(StatusCode::ServiceUnavailable)
+    if r.service_available() {
+        b12(r, _req, state)
+    } else {
+        halt(StatusCode::ServiceUnavailable)
     }
 }
 
@@ -164,56 +170,23 @@ fn b03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- C column
 // ------------------------------------------------------------------------------
 
-// TODO: Do naive matching instead of hardcoding here.
-// TODO: This is insufficient. Implement more robust handling like Haskell's
-// mapAcceptMedia from Network.HTTP.Media
-fn map_accept_media(_provided: Vec<(Mime, Box<Fn(&Request) -> Body>)>, _accept: &Vec<QualityItem<Mime>>) -> Option<(Mime, Box<Fn(&Request) -> Body>)> {
-    Some((mime::TEXT_PLAIN, Box::new(|_| { Body::from("ok") })))
-}
-
 fn c04<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, accept_header: &Accept) -> BoxedFuture {
     trace(state, "c04");
     let provided = r.content_types_provided();
-    let result = Rc::new(map_accept_media(provided, &accept_header.0));
-    // let result = map_accept_media(provided, &accept_header.0);
-    match *result {
-        Some((ref accept_type, ref _resource)) => {
-            // let accept_type_clone = Rc::new(accept_type);
-            set_response_header(state, ContentType(Mime::clone(&accept_type)));
-            // set_matched_content_type(state, Rc::clone(&result));
-            let r_clone = Rc::clone(&result);
-            state.matched_content_type = r_clone;
+    let result = map_accept_media(provided, &accept_header);
+    match result {
+        Some(_) => {
+            state.matched_content_type = result;
             d04(r, req, state)
         },
         None => halt(StatusCode::NotAcceptable)
     }
 }
-// c04 r@Resource{..} = do
-//     trace "c04"
-//     req <- lift request
-//     provided <- lift contentTypesProvided
-//     let reqHeaders = requestHeaders req
-//         result = do
-//             acceptStr <- lookup HTTP.hAccept reqHeaders
-//             (acceptTyp, resource) <- mapAcceptMedia provided' acceptStr
-//             Just (acceptTyp, resource)
-//             where
-//                 -- this is so that in addition to getting back the resource
-//                 -- that we match, we also return the content-type provided
-//                 -- by that resource.
-//                 provided' = map dupContentType provided
-//                 dupContentType (a, b) = (a, (a, b))
-
-//     case result of
-//       Nothing -> lift $ halt HTTP.status406
-//       Just res -> do
-//         modify (\fs -> fs { _contentType = Just res })
-//         d04 r
 
 fn c03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
     trace(state, "c03");
     match req.headers().get::<Accept>() {
-        Some(ahdr) => c04(r, req, state, &ahdr),
+        Some(ahdr) => c04(r, req, state, ahdr),
         None => d04(r, req, state)
     }
 }
@@ -559,32 +532,11 @@ fn n16<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn n11<R: Webmachine>(_r: &R, _req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn n11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
     trace(state, "n11");
-    // TODO: Implement POST handling
-    halt(StatusCode::Created)
+    let post_response = r.process_post(req);
+    process_post_action(r, req, state, post_response)
 }
-// n11 r@Resource{..} = trace "n11" >> lift processPost >>= flip processPostAction r
-
-// create :: Monad m => [Text] -> Resource m -> FlowStateT m ()
-// create ts Resource{..} = do
-//     loc <- lift (appendRequestPath ts)
-//     lift (addResponseHeader ("Location", loc))
-//     lift contentTypesAccepted >>= negotiateContentTypesAccepted
-
-// processPostAction :: Monad m => PostResponse m -> Flow  m
-// processPostAction (PostCreate ts) r = do
-//     create ts r
-//     p11 r
-// processPostAction (PostCreateRedirect ts) r = do
-//     create ts r
-//     lift $ halt HTTP.status303
-// processPostAction (PostProcess accepted) r = do
-//     negotiateContentTypesAccepted accepted >> p11 r
-// processPostAction (PostProcessRedirect accepted) _r = do
-//     locBs <- negotiateContentTypesAccepted accepted
-//     lift $ addResponseHeader ("Location", locBs)
-//     lift $ halt HTTP.status303
 
 fn n05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
     trace(state, "n05");
@@ -607,31 +559,36 @@ fn o20<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 }
 
 
-fn o18<R: Webmachine>(r: &R, _req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn o18<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
     trace(state, "o18");
-    match r.multiple_choices() {
-        true  => halt(StatusCode::MultipleChoices),
-        false => {
-            //  -- TODO: set etag, expiration, etc. headers
-            //  req <- lift request
-            //  let getOrHead = [ HTTP.methodGet
-            //                  , HTTP.methodHead
-            //                  ]
-            //  when (requestMethod req `elem` getOrHead) $ do
-            //      m <- _contentType <$> get
-            //      (cType, body) <- case m of
-            //          Nothing -> do
-            //              provided <- lift contentTypesProvided
-            //              return (head provided)
-            //          Just (cType, body) ->
-            //              return (cType, body)
-            //      b <- lift body
-            //      lift $ putResponseBody b
-            //      lift $ addResponseHeader ("Content-Type", renderHeader cType)
-            //      writeCacheTags r
-            // set_response_header(state, AirshipTrace(trace));
-            halt_with_response(StatusCode::Ok, state)
+    if r.multiple_choices() {
+        halt(StatusCode::MultipleChoices)
+    } else {
+        match req.method() {
+            // TODO: set expiration, etc. headers
+            Method::Get | Method::Head  => {
+                let (content_type, body_fn) =
+                    state.matched_content_type.take().unwrap_or_else(|| {
+                        // TODO: This unwrap should be safe because if we've
+                        // made it this far in the decision processing then we
+                        // know there is at least one entry in the
+                        // content_types_provided vector, but I want to confirm
+                        // this is absolutlely the case.
+                        r.content_types_provided().first().unwrap().clone()
+                    });
+                set_response_header(state, ContentType(Mime::clone(&content_type)));
+                let response_body = body_fn(req);
+                state.response.set_body(response_body);
+            },
+            _  => ()
+        };
+        if let Some(etag) = r.generate_etag(req) {
+            set_response_header(state, ETag(etag));
         }
+        if let Some(modified) = r.last_modified() {
+            set_response_header(state, LastModified(modified));
+        }
+        halt_with_response(StatusCode::Ok, state)
     }
 }
 
@@ -647,20 +604,39 @@ fn o17<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     trace(state, "o17");
     match req.method() {
         Method::Patch => {
-//        else lift patchContentTypesAccepted >>= negotiateContentTypesAccepted >> o20 r
-            o20(r, req, state)
+            let accepted = r.patch_content_types_accepted();
+            let result = req.headers().get::<ContentType>()
+                .and_then(|ct_hdr| {
+                    map_content_media::<()>(accepted, ct_hdr)
+                });
+            match result {
+                Some(action) => {
+                    action(req);
+                    o20(r, req, state)
+                },
+                None => halt(StatusCode::UnsupportedMediaType)
+            }
         },
-        _             => o18(r, req, state)
+        _ => o18(r, req, state)
     }
 }
 
 fn o14<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
     trace(state, "o14");
-    match r.is_conflict() {
-        true  => halt(StatusCode::Conflict),
-        false => {
-//         else lift contentTypesAccepted >>= negotiateContentTypesAccepted >> p11 r
-            p11(r, req, state)
+    if r.is_conflict() {
+        halt(StatusCode::Conflict)
+    } else {
+        let accepted = r.content_types_accepted();
+        let result = req.headers().get::<ContentType>()
+            .and_then(|ct_hdr| {
+                map_content_media::<()>(accepted, ct_hdr)
+            });
+        match result {
+            Some(action) => {
+                action(req);
+                p11(r, req, state)
+            },
+            None => halt(StatusCode::UnsupportedMediaType)
         }
     }
 }
@@ -679,10 +655,156 @@ fn p11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 
 fn p03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
     trace(state, "p03");
-    match r.is_conflict() {
-        true => halt(StatusCode::Conflict),
-        false =>
-        // else lift contentTypesAccepted >>= negotiateContentTypesAccepted >> p11 r
-            p11(r, req, state)
+    if r.is_conflict() {
+        halt(StatusCode::Conflict)
+    } else {
+        let accepted = r.content_types_accepted();
+        let result = req.headers().get::<ContentType>()
+            .and_then(|ct_hdr| {
+                map_content_media::<()>(accepted, ct_hdr)
+            });
+        match result {
+            Some(action) => {
+                action(req);
+                p11(r, req, state)
+            },
+            None => halt(StatusCode::UnsupportedMediaType)
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------
+// -- Decision helper functions
+// ------------------------------------------------------------------------------
+
+/// Matches a list of server-side parsing options against a the client-side
+/// content value.
+fn map_content_media<T>(
+    provided: Vec<(Mime, fn(&Request) -> T)>,
+    content_type: &ContentType
+) -> Option<fn(&Request) -> T> {
+    let mut action_match = None;
+
+    // Iterate through all of the provided Content-Types for the
+    // resource and look for a match.
+    for (ct_hdr, action) in &provided {
+        if ct_hdr == &content_type.0 {
+            action_match = Some(action.clone());
+            break;
+        }
+    }
+    action_match
+}
+
+/// Matches a list of server-side resource options against a quality-marked list
+/// of client-side preferences.
+fn map_accept_media(
+    provided: Vec<(Mime, fn(&Request) -> Body)>,
+    accept: &Accept
+) -> Option<(Mime, fn(&Request) -> Body)> {
+    let zero_quality = q(0);
+    let mut match_quality = q(0);
+    let mut type_match = None;
+
+    for a_hdr in accept.iter() {
+        if a_hdr.quality == zero_quality {
+            // Do not match Accept header values with a quality of zero
+            break;
+        } else {
+            // Iterate through all of the provided Content-Types for the
+            // resource and find the match with the highest quality value.
+            for (ct_hdr, body_fn) in &provided {
+                if a_hdr.item == mime::STAR_STAR && a_hdr.quality > match_quality {
+                    type_match = Some((ct_hdr.clone(), body_fn.clone()));
+                    match_quality = a_hdr.quality;
+                } else if a_hdr.item.type_() == ct_hdr.type_() && a_hdr.quality > match_quality {
+                    if a_hdr.item.subtype() == ct_hdr.subtype() || a_hdr.item.subtype() == mime::STAR {
+                        type_match = Some((ct_hdr.clone(), body_fn.clone()));
+                        match_quality = a_hdr.quality;
+                    }
+                }
+            }
+        }
+    }
+    type_match
+}
+
+fn append_request_path(req: &Request, path_segments: &Vec<String>) -> String {
+    let path_suffix: String =
+        path_segments
+        .iter()
+        .cloned()
+        .intersperse(",".to_string())
+        .collect();
+    [req.path(), &path_suffix].concat().into()
+}
+
+fn create<R: Webmachine>(
+    r: &R,
+    req: &Request,
+    state: &mut RequestState,
+    path_segments: &Vec<String>
+) -> Option<()> {
+    let location = append_request_path(req, path_segments);
+    set_response_header(state, Location::new(location));
+    let accepted = r.content_types_accepted();
+    // negotiate_content_types_accepted::<()>(&accepted, req);
+    req.headers().get::<ContentType>()
+        .and_then(|ct_hdr| {
+            map_content_media::<()>(accepted, ct_hdr)
+        })
+        .and_then(|action| {
+            action(req);
+            Some(())
+        })
+}
+
+fn process_post_action<R: Webmachine>(
+    r: &R,
+    req: &Request,
+    state: &mut RequestState,
+    pr: PostResponse
+) -> BoxedFuture
+{
+    match pr {
+        PostResponse::PostCreate(ref path_segments) => {
+            match create(r, req, state, path_segments) {
+                Some(()) => p11(r, req, state),
+                None => halt(StatusCode::UnsupportedMediaType)
+            }
+        },
+        PostResponse::PostCreateRedirect(ref path_segments) => {
+            match create(r, req, state, path_segments) {
+                Some(()) => halt(StatusCode::SeeOther),
+                None => halt(StatusCode::UnsupportedMediaType)
+            }
+        },
+        PostResponse::PostProcess(accepted) => {
+            let result = req.headers().get::<ContentType>()
+                .and_then(|ct_hdr| {
+                    map_content_media::<()>(accepted, ct_hdr)
+                });
+            match result {
+                Some(action) => {
+                    action(req);
+                    p11(r, req, state)
+                },
+                None => halt(StatusCode::UnsupportedMediaType)
+            }
+        },
+        PostResponse::PostProcessRedirect(accepted) => {
+            let result = req.headers().get::<ContentType>()
+                .and_then(|ct_hdr| {
+                    map_content_media::<String>(accepted, ct_hdr)
+                });
+            match result {
+                Some(action) => {
+                    let location = action(req);
+                    set_response_header(state, Location::new(location));
+                    halt(StatusCode::SeeOther)
+                },
+                None => halt(StatusCode::UnsupportedMediaType)
+            }
+        }
     }
 }
