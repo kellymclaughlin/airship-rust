@@ -82,7 +82,10 @@ pub enum RouteLeaf<R: Webmachine> {
 pub struct RoutingSpec<'a, R: Webmachine>(pub Vec<(&'a str, R)>);
 pub struct RoutingTrie<R: Webmachine>(pub Trie<String, RouteLeaf<R>>);
 
-impl<'a, R> From<RoutingSpec<'a, R>> for RoutingTrie<R> where R: Webmachine {
+impl<'a, R> From<RoutingSpec<'a, R>> for RoutingTrie<R>
+where
+    R: Webmachine
+{
     fn from(spec: RoutingSpec<R>) -> Self {
         // Convert the route string into a vector of `Route`s
         let routes: Vec<(Route, R)> =

@@ -2,6 +2,7 @@ use hyper::{Body, Method, Request};
 use mime;
 use mime::Mime;
 
+use webmachine_derive::*;
 use airship::resource::{Resource, Webmachine};
 use airship::server;
 
@@ -21,11 +22,18 @@ impl Webmachine for GetResource {
     }
 }
 
+#[derive(Clone, Webmachine)]
+enum MyResources {
+    Get(GetResource),
+    Res(Resource)
+}
+
+
 fn main() {
     let addr = "127.0.0.1:3000".parse().unwrap();
     let routes = vec![
-        ("test </> place", GetResource {}),
-        ("test </> route </> ::name::", GetResource {}),
+        ("test </> place", MyResources::Get(GetResource {})),
+        ("test </> route </> ::name::", MyResources::Res(Resource {})),
     ];
     server::run(addr, &routes);
 }

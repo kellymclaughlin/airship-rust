@@ -5,6 +5,8 @@ use hyper::header::*;
 use mime;
 use mime::Mime;
 
+use webmachine_derive::*;
+
 pub trait Webmachine {
     // Whether to allow HTTP POSTs to a missing resource. Default: false.
     fn allow_missing_post(&self) -> bool {
@@ -202,11 +204,8 @@ pub trait Webmachine {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Webmachine)]
 pub struct Resource;
-
-impl Webmachine for Resource {}
-
 
 /// Used when processing POST requests so as to handle the outcome of the binary
 /// decisions between handling a POST as a create request and whether to

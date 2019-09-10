@@ -11,7 +11,6 @@ use crate::route;
 use crate::route::{RoutingSpec, RoutingTrie};
 use crate::types::RequestState;
 
-// #[derive(Clone)]
 struct Airship<R>
 where
     R: Webmachine + Clone
