@@ -1,3 +1,15 @@
+//! # derive `Webmachine` for structs and enums
+//!
+//! This allows airship users to derive a default `Webmachine` implementation
+//! for structs or to combine multiple resources that each implement the
+//! `Webmachine` trait into a single application into an `enum` and derive the
+//! `Webmachine` implementation for that `enum`. The airship `RoutingSpec` is
+//! specified using a `std::Vec`, but rust collections may only contain a items
+//! of a single concrete type. The use of an `enum` to represent all of the
+//! airship application's resources provides that one concrete type and using
+//! `#[derive(Webmachine)]` with the `enum` avoids any extra boilerplate in the
+//! application.
+
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
@@ -58,6 +70,18 @@ fn impl_webmachine_enum_variants(
     let is_conflict_variants = impl_is_conflict(name, variants);
     let known_content_type_variants = impl_known_content_type(name, variants);
     let last_modified_variants = impl_last_modified(name, variants);
+    let language_available_variants = impl_language_available(name, variants);
+    let malformed_request_variants = impl_malformed_request(name, variants);
+    let moved_permanently_variants = impl_moved_permanently(name, variants);
+    let moved_temporarily_variants = impl_moved_temporarily(name, variants);
+    let multiple_choices_variants = impl_multiple_choices(name, variants);
+    let patch_content_types_accepted_variants = impl_patch_content_types_accepted(name, variants);
+    let previously_existed_variants = impl_previously_existed(name, variants);
+    let process_post_variants = impl_process_post(name, variants);
+    let resource_exists_variants = impl_resource_exists(name, variants);
+    let service_available_variants = impl_service_available(name, variants);
+    let uri_too_long_variants = impl_uri_too_long(name, variants);
+    let valid_content_headers_variants = impl_valid_content_headers(name, variants);
 
     quote! {
         impl Webmachine for #name {
@@ -88,6 +112,30 @@ fn impl_webmachine_enum_variants(
             #known_content_type_variants
 
             #last_modified_variants
+
+            #language_available_variants
+
+            #malformed_request_variants
+
+            #moved_permanently_variants
+
+            #moved_temporarily_variants
+
+            #multiple_choices_variants
+
+            #patch_content_types_accepted_variants
+
+            #previously_existed_variants
+
+            #process_post_variants
+
+            #resource_exists_variants
+
+            #service_available_variants
+
+            #uri_too_long_variants
+
+            #valid_content_headers_variants
         }
     }
 }
@@ -432,6 +480,280 @@ fn impl_last_modified(
 
     quote! {
         fn last_modified(&self) -> Option<hyper::header::HttpDate> {
+            match *self {
+                #(#variants)*
+            }
+        }
+    }
+}
+
+fn impl_language_available(
+    name: &syn::Ident,
+    variants: &Punctuated<Variant, Comma>
+) -> proc_macro2::TokenStream
+{
+    let callback_method = quote! {
+        language_available
+    };
+    let trailing_args = quote! {
+        , accept_lang_header
+    };
+    let variants = variants
+        .iter()
+        .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
+
+    quote! {
+        fn language_available<H: hyper::header::Header>(&self, accept_lang_header: &H) -> bool {
+            match *self {
+                #(#variants)*
+            }
+        }
+    }
+}
+
+fn impl_malformed_request(
+    name: &syn::Ident,
+    variants: &Punctuated<Variant, Comma>
+) -> proc_macro2::TokenStream
+{
+    let callback_method = quote! {
+        malformed_request
+    };
+    let trailing_args = quote! {
+        , req
+    };
+    let variants = variants
+        .iter()
+        .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
+
+    quote! {
+        fn malformed_request(&self, req: &Request) -> bool {
+            match *self {
+                #(#variants)*
+            }
+        }
+    }
+}
+
+fn impl_moved_permanently(
+    name: &syn::Ident,
+    variants: &Punctuated<Variant, Comma>
+) -> proc_macro2::TokenStream
+{
+    let callback_method = quote! {
+        moved_permanently
+    };
+    let trailing_args = quote! {};
+    let variants = variants
+        .iter()
+        .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
+
+    quote! {
+        fn moved_permanently(&self) -> Option<String> {
+            match *self {
+                #(#variants)*
+            }
+        }
+    }
+}
+
+fn impl_moved_temporarily(
+    name: &syn::Ident,
+    variants: &Punctuated<Variant, Comma>
+) -> proc_macro2::TokenStream
+{
+    let callback_method = quote! {
+        moved_temporarily
+    };
+    let trailing_args = quote! {};
+    let variants = variants
+        .iter()
+        .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
+
+    quote! {
+        fn moved_temporarily(&self) -> Option<String> {
+            match *self {
+                #(#variants)*
+            }
+        }
+    }
+}
+
+fn impl_multiple_choices(
+    name: &syn::Ident,
+    variants: &Punctuated<Variant, Comma>
+) -> proc_macro2::TokenStream
+{
+    let callback_method = quote! {
+        multiple_choices
+    };
+    let trailing_args = quote! {};
+    let variants = variants
+        .iter()
+        .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
+
+    quote! {
+        fn multiple_choices(&self) -> bool {
+            match *self {
+                #(#variants)*
+            }
+        }
+    }
+}
+
+fn impl_patch_content_types_accepted(
+    name: &syn::Ident,
+    variants: &Punctuated<Variant, Comma>
+) -> proc_macro2::TokenStream
+{
+    let callback_method = quote! {
+        patch_content_types_accepted
+    };
+    let trailing_args = quote! {};
+    let variants = variants
+        .iter()
+        .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
+
+    quote! {
+        fn patch_content_types_accepted(&self) -> Vec<(Mime, fn(&Request))> {
+            match *self {
+                #(#variants)*
+            }
+        }
+    }
+}
+
+fn impl_previously_existed(
+    name: &syn::Ident,
+    variants: &Punctuated<Variant, Comma>
+) -> proc_macro2::TokenStream
+{
+    let callback_method = quote! {
+        previously_existed
+    };
+    let trailing_args = quote! {};
+    let variants = variants
+        .iter()
+        .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
+
+    quote! {
+        fn previously_existed(&self) -> bool {
+            match *self {
+                #(#variants)*
+            }
+        }
+    }
+}
+
+fn impl_process_post(
+    name: &syn::Ident,
+    variants: &Punctuated<Variant, Comma>
+) -> proc_macro2::TokenStream
+{
+    let callback_method = quote! {
+        process_post
+    };
+    let trailing_args = quote! {
+        , req
+    };
+    let variants = variants
+        .iter()
+        .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
+
+    quote! {
+        fn process_post(&self, req: &Request) -> airship::resource::PostResponse {
+            match *self {
+                #(#variants)*
+            }
+        }
+    }
+}
+
+fn impl_resource_exists(
+    name: &syn::Ident,
+    variants: &Punctuated<Variant, Comma>
+) -> proc_macro2::TokenStream
+{
+    let callback_method = quote! {
+        resource_exists
+    };
+    let trailing_args = quote! {};
+    let variants = variants
+        .iter()
+        .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
+
+    quote! {
+        fn resource_exists(&self) -> bool {
+            match *self {
+                #(#variants)*
+            }
+        }
+    }
+}
+
+fn impl_service_available(
+    name: &syn::Ident,
+    variants: &Punctuated<Variant, Comma>
+) -> proc_macro2::TokenStream
+{
+    let callback_method = quote! {
+        service_available
+    };
+    let trailing_args = quote! {};
+    let variants = variants
+        .iter()
+        .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
+
+    quote! {
+        fn service_available(&self) -> bool {
+            match *self {
+                #(#variants)*
+            }
+        }
+    }
+}
+
+fn impl_uri_too_long(
+    name: &syn::Ident,
+    variants: &Punctuated<Variant, Comma>
+) -> proc_macro2::TokenStream
+{
+    let callback_method = quote! {
+        uri_too_long
+    };
+    let trailing_args = quote! {
+        , uri
+    };
+    let variants = variants
+        .iter()
+        .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
+
+    quote! {
+        fn uri_too_long(&self, uri: &hyper::Uri) -> bool {
+            match *self {
+                #(#variants)*
+            }
+        }
+    }
+}
+
+fn impl_valid_content_headers(
+    name: &syn::Ident,
+    variants: &Punctuated<Variant, Comma>
+) -> proc_macro2::TokenStream
+{
+    let callback_method = quote! {
+        valid_content_headers
+    };
+    let trailing_args = quote! {
+        , req
+    };
+    let variants = variants
+        .iter()
+        .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
+
+    quote! {
+        fn valid_content_headers(&self, req: &Request) -> bool {
             match *self {
                 #(#variants)*
             }
