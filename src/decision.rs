@@ -10,9 +10,13 @@ use mime::Mime;
 
 use crate::resource::{PostResponse, Webmachine};
 use crate::types::{
-    RequestState,
+    HasAirshipState,
+    get_matched_content_type,
+    get_response,
+    get_trace,
     is_response_empty,
     request_time,
+    matched_content_type,
     set_response_header,
     trace
 };
@@ -22,7 +26,15 @@ header! { (AirshipQuip, "Airship-Quip") => [String] }
 
 type BoxedFuture = Box<Future<Item = Response, Error = hyper::Error>>;
 
-pub fn traverse<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+pub fn traverse<R, S>(
+    r: &R,
+    req: &Request,
+    state: &mut S
+) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     b13(r, req, state)
 }
 
@@ -32,8 +44,11 @@ fn halt(status_code: StatusCode) -> BoxedFuture {
     ))
 }
 
-fn halt_with_response(status_code: StatusCode, state: &mut RequestState) -> BoxedFuture {
-    let trace = state.decision_trace.join(",");
+fn halt_with_response<S: HasAirshipState>(
+    status_code: StatusCode,
+    state: &mut S
+) -> BoxedFuture {
+    let trace = get_trace(state).join(",");
     let quip = String::from("blame me if inappropriate");
 
     let response = Response::new()
@@ -59,7 +74,15 @@ fn halt_with_header<H: Header>(status_code: StatusCode, hdr: H) -> BoxedFuture {
 // B column
 ///////////////////////////////////////////////////////////////////////////////
 
-fn b13<R: Webmachine>(r: &R, _req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn b13<R, S>(
+    r: &R,
+    _req: &Request,
+    state: &mut S
+) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "b13");
     if r.service_available() {
         b12(r, _req, state)
@@ -68,7 +91,14 @@ fn b13<R: Webmachine>(r: &R, _req: &Request, state: &mut RequestState) -> BoxedF
     }
 }
 
-fn b12<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn b12<R, S>(
+    r: &R,
+    req: &Request,
+    state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "b12");
     // known method
     let request_method = req.method();
@@ -88,7 +118,15 @@ fn b12<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn b11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn b11<R, S>(
+    r: &R,
+    req: &Request,
+    state: &mut S
+) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "b11");
     match r.uri_too_long(req.uri()) {
         true => halt(StatusCode::UriTooLong),
@@ -96,7 +134,15 @@ fn b11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn b10<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn b10<R, S>(
+    r: &R,
+    req: &Request,
+    state: &mut S
+) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "b10");
     let request_method = req.method();
     let allowed_methods = r.allowed_methods();
@@ -106,7 +152,15 @@ fn b10<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn b09<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn b09<R, S>(
+    r: &R,
+    req: &Request,
+    state: &mut S
+) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "b09");
     match r.malformed_request(req) {
         true => halt(StatusCode::BadRequest),
@@ -114,7 +168,15 @@ fn b09<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn b08<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn b08<R, S>(
+    r: &R,
+    req: &Request,
+    state: &mut S
+) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "b08");
     match r.is_authorized(req) {
         true => b07(r, req, state),
@@ -122,7 +184,15 @@ fn b08<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn b07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn b07<R, S>(
+    r: &R,
+    req: &Request,
+    state: &mut S
+) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "b07");
     match r.forbidden(req) {
         true => halt(StatusCode::Forbidden),
@@ -130,7 +200,15 @@ fn b07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn b06<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn b06<R, S>(
+    r: &R,
+    req: &Request,
+    state: &mut S
+) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "b06");
     match r.valid_content_headers(req) {
         true => b05(r, req, state),
@@ -138,7 +216,11 @@ fn b06<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn b05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn b05<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "b05");
     match r.known_content_type(req) {
         true => b04(r, req, state),
@@ -146,7 +228,11 @@ fn b05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn b04<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn b04<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "b04");
     match r.entity_too_large(req) {
         true => halt(StatusCode::PayloadTooLarge),
@@ -154,7 +240,11 @@ fn b04<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn b03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn b03<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "b03");
     match req.method() {
         Method::Options => {
@@ -170,20 +260,28 @@ fn b03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- C column
 // ------------------------------------------------------------------------------
 
-fn c04<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, accept_header: &Accept) -> BoxedFuture {
+fn c04<R, S>(r: &R, req: &Request, state: &mut S, accept_header: &Accept) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "c04");
     let provided = r.content_types_provided();
     let result = map_accept_media(provided, &accept_header);
     match result {
         Some(_) => {
-            state.matched_content_type = result;
+            matched_content_type(state, result);
             d04(r, req, state)
         },
         None => halt(StatusCode::NotAcceptable)
     }
 }
 
-fn c03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn c03<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "c03");
     match req.headers().get::<Accept>() {
         Some(ahdr) => c04(r, req, state, ahdr),
@@ -195,7 +293,12 @@ fn c03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- D column
 // ------------------------------------------------------------------------------
 
-fn d05<R: Webmachine, H: Header>(r: &R, req: &Request, state: &mut RequestState, accept_lang_header: &H) -> BoxedFuture {
+fn d05<R, H, S>(r: &R, req: &Request, state: &mut S, accept_lang_header: &H) -> BoxedFuture
+where
+    H: Header,
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "d05");
     if r.language_available(accept_lang_header) {
         e05(r, req, state)
@@ -204,7 +307,11 @@ fn d05<R: Webmachine, H: Header>(r: &R, req: &Request, state: &mut RequestState,
     }
 }
 
-fn d04<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn d04<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "d04");
     match req.headers().get::<AcceptLanguage>() {
         Some(alhdr) => d05(r, req, state, alhdr),
@@ -216,13 +323,22 @@ fn d04<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- E column
 // ------------------------------------------------------------------------------
 
-fn e06<R: Webmachine, H: Header>(r: &R, req: &Request, state: &mut RequestState, _accept_charset_header: &H) -> BoxedFuture {
+fn e06<R, H, S>(r: &R, req: &Request, state: &mut S, _accept_charset_header: &H) -> BoxedFuture
+where
+    H: Header,
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "e06");
     //TODO: Implement charset negotiation
     f06(r, req, state)
 }
 
-fn e05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn e05<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "e05");
     match req.headers().get::<AcceptCharset>() {
         Some(achdr) => e06(r, req, state, achdr),
@@ -234,13 +350,22 @@ fn e05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- F column
 // ------------------------------------------------------------------------------
 
-fn f07<R: Webmachine, H: Header>(r: &R, req: &Request, state: &mut RequestState, _accept_encoding_header: &H) -> BoxedFuture {
+fn f07<R, H, S>(r: &R, req: &Request, state: &mut S, _accept_encoding_header: &H) -> BoxedFuture
+where
+    H: Header,
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "f07");
     //TODO: Implement encoding negotiation
     f06(r, req, state)
 }
 
-fn f06<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn f06<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "f06");
     match req.headers().get::<AcceptEncoding>() {
         Some(aehdr) => f07(r, req, state, aehdr),
@@ -252,7 +377,11 @@ fn f06<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- G column
 // ------------------------------------------------------------------------------
 
-fn g11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, etags: &Vec<EntityTag>) -> BoxedFuture {
+fn g11<R, S>(r: &R, req: &Request, state: &mut S, etags: &Vec<EntityTag>) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "g11");
     match etags.is_empty() {
         true => halt(StatusCode::PreconditionFailed),
@@ -260,7 +389,11 @@ fn g11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, etags: &Ve
     }
 }
 
-fn g09<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, if_match: &IfMatch) -> BoxedFuture {
+fn g09<R, S>(r: &R, req: &Request, state: &mut S, if_match: &IfMatch) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "g09");
     match if_match {
         IfMatch::Any => h10(r, req, state),
@@ -268,7 +401,11 @@ fn g09<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, if_match: 
     }
 }
 
-fn g08<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn g08<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "g08");
     match req.headers().get::<IfMatch>() {
         Some(imhdr) => g09(r, req, state, &imhdr),
@@ -276,7 +413,11 @@ fn g08<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn g07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn g07<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "g07");
     // TODO: set Vary headers
     match r.resource_exists() {
@@ -289,7 +430,11 @@ fn g07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- H column
 // ------------------------------------------------------------------------------
 
-fn h12<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn h12<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "h12");
     let m_if_unmod_since = req.headers().get::<IfUnmodifiedSince>();
     let m_last_modified = r.last_modified();
@@ -300,7 +445,11 @@ fn h12<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn h11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn h11<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "h11");
     // TODO: Revisit this to understand how hyper handles invalid HttpDate values
     // let m_header_str = req.headers().get_raw("if-unmodified-since");
@@ -315,7 +464,11 @@ fn h11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn h10<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn h10<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "h10");
     match req.headers().has::<IfUnmodifiedSince>() {
         true => h11(r, req, state),
@@ -323,7 +476,11 @@ fn h10<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn h07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn h07<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "h07");
     match req.headers().get::<IfMatch>() {
         Some(IfMatch::Any) => halt(StatusCode::PreconditionFailed),
@@ -335,7 +492,11 @@ fn h07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- I column
 // ------------------------------------------------------------------------------
 
-fn i13<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, if_none_match: &IfNoneMatch) -> BoxedFuture {
+fn i13<R, S>(r: &R, req: &Request, state: &mut S, if_none_match: &IfNoneMatch) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "i13");
     match if_none_match {
         IfNoneMatch::Any          => j18(r, req, state),
@@ -343,7 +504,11 @@ fn i13<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, if_none_ma
     }
 }
 
-fn i12<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn i12<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "i12");
     match req.headers().get::<IfNoneMatch>() {
         Some(inmhdr) => i13(r, req, state, inmhdr),
@@ -352,7 +517,11 @@ fn i12<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 }
 
 
-fn i07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn i07<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "i07");
     match req.method() {
         Method::Put => i04(r, req, state),
@@ -360,7 +529,11 @@ fn i07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn i04<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn i04<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "i04");
     match r.moved_permanently() {
         Some(location) => {
@@ -375,7 +548,11 @@ fn i04<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- J column
 // ------------------------------------------------------------------------------
 
-fn j18<R: Webmachine>(_r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn j18<R, S>(_r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "j18");
     match req.method() {
         Method::Get  => halt(StatusCode::NotModified),
@@ -388,7 +565,11 @@ fn j18<R: Webmachine>(_r: &R, req: &Request, state: &mut RequestState) -> BoxedF
 // -- K column
 // ------------------------------------------------------------------------------
 
-fn k13<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, etags: &Vec<EntityTag>) -> BoxedFuture {
+fn k13<R, S>(r: &R, req: &Request, state: &mut S, etags: &Vec<EntityTag>) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "k13");
     match etags.is_empty() {
         true  => l13(r, req, state),
@@ -396,7 +577,11 @@ fn k13<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState, etags: &Ve
     }
 }
 
-fn k07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn k07<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "k07");
     match r.previously_existed() {
         true  => k05(r, req, state),
@@ -404,7 +589,11 @@ fn k07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn k05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn k05<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "k05");
     match r.moved_permanently() {
         Some(location) => {
@@ -419,7 +608,11 @@ fn k05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- L column
 // ------------------------------------------------------------------------------
 
-fn l17<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn l17<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "l17");
     let m_if_mod_since = req.headers().get::<IfModifiedSince>();
     let m_last_modified = r.last_modified();
@@ -430,7 +623,11 @@ fn l17<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn l15<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn l15<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "l15");
     let m_if_mod_since = req.headers().get::<IfModifiedSince>();
     match m_if_mod_since {
@@ -440,7 +637,11 @@ fn l15<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn l14<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn l14<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "l14");
     // TODO: Revisit this to understand how hyper handles invalid HttpDate values
     // let valid_date = req.headers()
@@ -454,7 +655,11 @@ fn l14<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn l13<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn l13<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "l13");
     match req.headers().has::<IfModifiedSince>() {
         true  => l14(r, req, state),
@@ -462,7 +667,11 @@ fn l13<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn l07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn l07<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "l07");
     match req.method() {
         Method::Post => m07(r, req, state),
@@ -470,7 +679,11 @@ fn l07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn l05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn l05<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "l05");
     match r.moved_temporarily() {
         Some(location) => {
@@ -485,7 +698,11 @@ fn l05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- M column
 // ------------------------------------------------------------------------------
 
-fn m20<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn m20<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "m20");
     match (r.delete_resource(req), r.delete_completed()) {
         (true, true)  => o20(r, req, state),
@@ -494,7 +711,11 @@ fn m20<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn m16<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn m16<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "m16");
     match req.method() {
         Method::Delete => m20(r, req, state),
@@ -503,7 +724,11 @@ fn m16<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 }
 
 
-fn m07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn m07<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "m07");
     match r.allow_missing_post() {
         true  => n11(r, req, state),
@@ -512,7 +737,11 @@ fn m07<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 }
 
 
-fn m05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn m05<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "m05");
     match req.method() {
         Method::Post => n05(r, req, state),
@@ -524,7 +753,11 @@ fn m05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- N column
 // ------------------------------------------------------------------------------
 
-fn n16<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn n16<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "n16");
     match req.method() {
         Method::Post => n11(r, req, state),
@@ -532,13 +765,21 @@ fn n16<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn n11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn n11<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "n11");
     let post_response = r.process_post(req);
     process_post_action(r, req, state, post_response)
 }
 
-fn n05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn n05<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "n05");
     match r.allow_missing_post() {
         true  => n11(r, req, state),
@@ -550,7 +791,11 @@ fn n05<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- O column
 // ------------------------------------------------------------------------------
 
-fn o20<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn o20<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "o20");
     match is_response_empty(state) {
         true  => halt(StatusCode::Created),
@@ -559,7 +804,11 @@ fn o20<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 }
 
 
-fn o18<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn o18<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "o18");
     if r.multiple_choices() {
         halt(StatusCode::MultipleChoices)
@@ -568,7 +817,7 @@ fn o18<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
             // TODO: set expiration, etc. headers
             Method::Get | Method::Head  => {
                 let (content_type, body_fn) =
-                    state.matched_content_type.take().unwrap_or_else(|| {
+                    get_matched_content_type(state).take().unwrap_or_else(|| {
                         // TODO: This unwrap should be safe because if we've
                         // made it this far in the decision processing then we
                         // know there is at least one entry in the
@@ -578,7 +827,7 @@ fn o18<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
                     });
                 set_response_header(state, ContentType(Mime::clone(&content_type)));
                 let response_body = body_fn(req);
-                state.response.set_body(response_body);
+                get_response(state).set_body(response_body);
             },
             _  => ()
         };
@@ -592,7 +841,11 @@ fn o18<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn o16<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn o16<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "o16");
     match req.method() {
         Method::Put => o14(r, req, state),
@@ -600,7 +853,11 @@ fn o16<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn o17<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn o17<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "o17");
     match req.method() {
         Method::Patch => {
@@ -621,7 +878,11 @@ fn o17<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn o14<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn o14<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "o14");
     if r.is_conflict() {
         halt(StatusCode::Conflict)
@@ -645,7 +906,11 @@ fn o14<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
 // -- P column
 // ------------------------------------------------------------------------------
 
-fn p11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn p11<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "p11");
     match req.headers().has::<Location>() {
         true => halt(StatusCode::Created),
@@ -653,7 +918,11 @@ fn p11<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFu
     }
 }
 
-fn p03<R: Webmachine>(r: &R, req: &Request, state: &mut RequestState) -> BoxedFuture {
+fn p03<R, S>(r: &R, req: &Request, state: &mut S) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     trace(state, "p03");
     if r.is_conflict() {
         halt(StatusCode::Conflict)
@@ -739,12 +1008,16 @@ fn append_request_path(req: &Request, path_segments: &Vec<String>) -> String {
     [req.path(), &path_suffix].concat().into()
 }
 
-fn create<R: Webmachine>(
+fn create<R, S>(
     r: &R,
     req: &Request,
-    state: &mut RequestState,
+    state: &mut S,
     path_segments: &Vec<String>
-) -> Option<()> {
+) -> Option<()>
+where
+    R: Webmachine,
+    S: HasAirshipState
+{
     let location = append_request_path(req, path_segments);
     set_response_header(state, Location::new(location));
     let accepted = r.content_types_accepted();
@@ -759,12 +1032,15 @@ fn create<R: Webmachine>(
         })
 }
 
-fn process_post_action<R: Webmachine>(
+fn process_post_action<R, S>(
     r: &R,
     req: &Request,
-    state: &mut RequestState,
+    state: &mut S,
     pr: PostResponse
 ) -> BoxedFuture
+where
+    R: Webmachine,
+    S: HasAirshipState
 {
     match pr {
         PostResponse::PostCreate(ref path_segments) => {

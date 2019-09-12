@@ -9,29 +9,37 @@ use crate::resource::Webmachine;
 use crate::decision;
 use crate::route;
 use crate::route::{RoutingSpec, RoutingTrie};
-use crate::types::RequestState;
+use crate::types::{HasAirshipState, RequestState};
 
-struct Airship<R>
+struct Airship<R, S, F>
 where
-    R: Webmachine + Clone
+    R: Webmachine + Clone,
+    S: HasAirshipState,
+    F: Fn() -> S
 {
-    routes: Arc<RoutingTrie<R>>
+    routes: Arc<RoutingTrie<R>>,
+    new_request_state: F
 }
 
-impl<R> Airship<R>
+impl<R, S, F> Airship<R, S, F>
 where
-    R: Webmachine + Clone
+    R: Webmachine + Clone,
+    S: HasAirshipState,
+    F: Fn() -> S
 {
-    fn new(routes: Arc<RoutingTrie<R>>) -> Airship<R> {
+    fn new(routes: Arc<RoutingTrie<R>>, new_request_state: F) -> Airship<R, S, F> {
         Airship {
-            routes: Arc::clone(&routes)
+            routes: Arc::clone(&routes),
+            new_request_state
         }
     }
 }
 
-impl<R> Service for Airship<R>
+impl<R, S, F> Service for Airship<R, S, F>
 where
-    R: Webmachine + Clone
+    R: Webmachine + Clone,
+    S: HasAirshipState,
+    F: Fn() -> S
 {
     // boilerplate hooking up hyper's server types
     type Request = Request;
@@ -43,7 +51,8 @@ where
         match route::route(&(*self.routes), req.path().to_string()) {
             Some(routed_resource) => {
                 let r = &(routed_resource.0).1;
-                decision::traverse::<R>(&r, &req, &mut RequestState::new())
+                let mut request_state = (self.new_request_state)();
+                decision::traverse::<R, S>(&r, &req, &mut request_state)
             },
             None =>  {
                 Box::new(futures::future::ok(
@@ -54,14 +63,19 @@ where
     }
 }
 
-pub fn run<R: 'static>(addr: SocketAddr, routes: &Vec<(&str, R)>)
+pub fn run<R: 'static, S, F>(
+    addr: SocketAddr,
+    routes: &Vec<(&str, R)>,
+    state_fun: &'static F)
 where
-    R: Webmachine + Clone
+    R: Webmachine + Clone,
+    S: HasAirshipState,
+    F: Fn() -> S
 {
     let routing_spec = RoutingSpec(routes.clone());
     let routing_trie = Arc::new(RoutingTrie::from(routing_spec));
     let server = Http::new()
-        .bind(&addr, move || Ok(Airship::new(Arc::clone(&routing_trie))))
+        .bind(&addr, move || Ok(Airship::new(Arc::clone(&routing_trie), state_fun)))
         .unwrap();
     server.run().unwrap();
 }
