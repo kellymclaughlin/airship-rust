@@ -12,7 +12,7 @@ pub struct AirshipState {
     pub error_responses: ErrorResponses,
     pub decision_trace: Vec<String>,
     pub matched_content_type: Option<(Mime, fn(&Request) -> Body)>,
-    pub response: Box<Response>,
+    pub response: Option<Response>,
     pub request_time: SystemTime
 }
 
@@ -22,7 +22,7 @@ impl AirshipState {
             error_responses: String::from(""),
             decision_trace: vec![],
             matched_content_type: None,
-            response: Box::new(Response::new()),
+            response: Some(Response::new()),
             request_time: SystemTime::now()
         }
     }
@@ -79,8 +79,9 @@ where
     S: HasAirshipState
 {
     let airship_state = state.get_airship_state_mut();
-    let response = &mut airship_state.response;
-    response.headers_mut().set(hdr);
+    if let Some(resp) = &mut airship_state.response {
+        resp.headers_mut().set(hdr)
+    }
 }
 
 pub fn request_time<S>(state: &S) -> HttpDate
@@ -96,23 +97,39 @@ where
     S: HasAirshipState
 {
     let airship_state = state.get_airship_state();
-    let response = &airship_state.response;
-    match response.body_ref() {
-        Some(b) => b.is_empty(),
-        None => false
+    if let Some(resp) = &airship_state.response {
+        if let Some(body) = resp.body_ref() {
+            body.is_empty()
+        } else {
+            false
+        }
+    } else {
+        false
     }
 }
 
 pub fn get_response<S>(
     state: &mut S
-) -> &mut Box<Response>
+) -> Response
 where
     S: HasAirshipState
 {
     let airship_state = state.get_airship_state_mut();
-    &mut airship_state.response
+    airship_state.response.take().unwrap_or_else(|| Response::new())
 }
 
+pub fn set_response_body<S>(
+    state: &mut S,
+    body: Body
+)
+where
+    S: HasAirshipState
+{
+    let airship_state = state.get_airship_state_mut();
+    if let Some(resp) = &mut airship_state.response {
+        resp.set_body(body)
+    }
+}
 
 pub struct RequestState(AirshipState);
 

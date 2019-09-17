@@ -9,17 +9,7 @@ use itertools::Itertools;
 use mime::Mime;
 
 use crate::resource::{PostResponse, Webmachine};
-use crate::types::{
-    HasAirshipState,
-    get_matched_content_type,
-    get_response,
-    get_trace,
-    is_response_empty,
-    request_time,
-    matched_content_type,
-    set_response_header,
-    trace
-};
+use crate::types::*;
 
 header! { (AirshipTrace, "Airship-Trace") => [String] }
 header! { (AirshipQuip, "Airship-Quip") => [String] }
@@ -38,9 +28,18 @@ where
     b13(r, req, state)
 }
 
-fn halt(status_code: StatusCode) -> BoxedFuture {
+fn halt<S: HasAirshipState>(
+    status_code: StatusCode,
+    state: &mut S
+) -> BoxedFuture {
+    let trace = get_trace(state).join(",");
+    let quip = String::from("blame me if inappropriate");
+
     Box::new(futures::future::ok(
         Response::new().with_status(status_code)
+            .with_header(Server::new("hyper/0.11.27"))
+            .with_header(AirshipTrace(trace))
+            .with_header(AirshipQuip(quip))
     ))
 }
 
@@ -51,21 +50,28 @@ fn halt_with_response<S: HasAirshipState>(
     let trace = get_trace(state).join(",");
     let quip = String::from("blame me if inappropriate");
 
-    let response = Response::new()
+    let response = get_response(state)
         .with_status(status_code)
         .with_header(Server::new("hyper/0.11.27"))
         .with_header(AirshipTrace(trace))
         .with_header(AirshipQuip(quip));
+
     Box::new(futures::future::ok(
         response
     ))
 }
 
-fn halt_with_header<H: Header>(status_code: StatusCode, hdr: H) -> BoxedFuture {
+fn halt_with_header<H: Header, S: HasAirshipState>(status_code: StatusCode, hdr: H, state: &mut S) -> BoxedFuture {
+    let trace = get_trace(state).join(",");
+    let quip = String::from("blame me if inappropriate");
+
     Box::new(futures::future::ok(
         Response::new()
             .with_status(status_code)
             .with_header(hdr)
+            .with_header(Server::new("hyper/0.11.27"))
+            .with_header(AirshipTrace(trace))
+            .with_header(AirshipQuip(quip))
     ))
 }
 
@@ -87,7 +93,7 @@ where
     if r.service_available(state) {
         b12(r, _req, state)
     } else {
-        halt(StatusCode::ServiceUnavailable)
+        halt(StatusCode::ServiceUnavailable, state)
     }
 }
 
@@ -113,7 +119,7 @@ where
                              Method::Patch];
     let mut iter = known_methods.iter();
     match iter.find(|&m| m == request_method) {
-        None    => halt(StatusCode::NotImplemented),
+        None    => halt(StatusCode::NotImplemented, state),
         Some(_) => b11(r, req, state)
     }
 }
@@ -129,7 +135,7 @@ where
 {
     trace(state, "b11");
     match r.uri_too_long(state, req.uri()) {
-        true => halt(StatusCode::UriTooLong),
+        true => halt(StatusCode::UriTooLong, state),
         false => b10(r, req, state)
     }
 }
@@ -147,7 +153,7 @@ where
     let request_method = req.method();
     let allowed_methods = r.allowed_methods(state);
     match allowed_methods.iter().find(|&m| m == request_method) {
-        None => halt_with_header(StatusCode::MethodNotAllowed, Allow(allowed_methods)),
+        None => halt_with_header(StatusCode::MethodNotAllowed, Allow(allowed_methods), state),
         Some(_) => b09(r, req, state)
     }
 }
@@ -163,7 +169,7 @@ where
 {
     trace(state, "b09");
     match r.malformed_request(state, req) {
-        true => halt(StatusCode::BadRequest),
+        true => halt(StatusCode::BadRequest, state),
         false => b08(r, req, state)
     }
 }
@@ -180,7 +186,7 @@ where
     trace(state, "b08");
     match r.is_authorized(state, req) {
         true => b07(r, req, state),
-        false => halt(StatusCode::Unauthorized)
+        false => halt(StatusCode::Unauthorized, state)
     }
 }
 
@@ -195,7 +201,7 @@ where
 {
     trace(state, "b07");
     match r.forbidden(state, req) {
-        true => halt(StatusCode::Forbidden),
+        true => halt(StatusCode::Forbidden, state),
         false => b06(r, req, state)
     }
 }
@@ -212,7 +218,7 @@ where
     trace(state, "b06");
     match r.valid_content_headers(state, req) {
         true => b05(r, req, state),
-        false => halt(StatusCode::NotImplemented)
+        false => halt(StatusCode::NotImplemented, state)
     }
 }
 
@@ -224,7 +230,7 @@ where
     trace(state, "b05");
     match r.known_content_type(state, req) {
         true => b04(r, req, state),
-        false => halt(StatusCode::UnsupportedMediaType)
+        false => halt(StatusCode::UnsupportedMediaType, state)
     }
 }
 
@@ -235,7 +241,7 @@ where
 {
     trace(state, "b04");
     match r.entity_too_large(state, req) {
-        true => halt(StatusCode::PayloadTooLarge),
+        true => halt(StatusCode::PayloadTooLarge, state),
         false => b03(r, req, state)
     }
 }
@@ -249,7 +255,7 @@ where
     match req.method() {
         Method::Options => {
             let allowed_methods = r.allowed_methods(state);
-            halt_with_header(StatusCode::NoContent, Allow(allowed_methods))
+            halt_with_header(StatusCode::NoContent, Allow(allowed_methods), state)
         },
         _ =>
             c03(r, req, state)
@@ -273,7 +279,7 @@ where
             matched_content_type(state, result);
             d04(r, req, state)
         },
-        None => halt(StatusCode::NotAcceptable)
+        None => halt(StatusCode::NotAcceptable, state)
     }
 }
 
@@ -303,7 +309,7 @@ where
     if r.language_available(state, accept_lang_header) {
         e05(r, req, state)
     } else {
-        halt(StatusCode::NotAcceptable)
+        halt(StatusCode::NotAcceptable, state)
     }
 }
 
@@ -384,7 +390,7 @@ where
 {
     trace(state, "g11");
     match etags.is_empty() {
-        true => halt(StatusCode::PreconditionFailed),
+        true => halt(StatusCode::PreconditionFailed, state),
         false => h10(r, req, state)
     }
 }
@@ -440,7 +446,7 @@ where
     let m_last_modified = r.last_modified(state);
     match (m_if_unmod_since, m_last_modified) {
         (Some(if_unmod_since), Some(last_modified))
-            if last_modified > **if_unmod_since => halt(StatusCode::PreconditionFailed),
+            if last_modified > **if_unmod_since => halt(StatusCode::PreconditionFailed, state),
         _                                       => i12(r, req, state)
     }
 }
@@ -483,7 +489,7 @@ where
 {
     trace(state, "h07");
     match req.headers().get::<IfMatch>() {
-        Some(IfMatch::Any) => halt(StatusCode::PreconditionFailed),
+        Some(IfMatch::Any) => halt(StatusCode::PreconditionFailed, state),
         _                  => i07(r, req, state)
     }
 }
@@ -538,7 +544,7 @@ where
     match r.moved_permanently(state) {
         Some(location) => {
             set_response_header(state, Location::new(location));
-            halt(StatusCode::MovedPermanently)
+            halt(StatusCode::MovedPermanently, state)
         },
         None => p03(r, req, state)
     }
@@ -555,9 +561,9 @@ where
 {
     trace(state, "j18");
     match req.method() {
-        Method::Get  => halt(StatusCode::NotModified),
-        Method::Head => halt(StatusCode::NotModified),
-        _            => halt(StatusCode::PreconditionFailed)
+        Method::Get  => halt(StatusCode::NotModified, state),
+        Method::Head => halt(StatusCode::NotModified, state),
+        _            => halt(StatusCode::PreconditionFailed, state)
     }
 }
 
@@ -598,7 +604,7 @@ where
     match r.moved_permanently(state) {
         Some(location) => {
             set_response_header(state, Location::new(location));
-            halt(StatusCode::MovedPermanently)
+            halt(StatusCode::MovedPermanently, state)
         },
         None           => l05(r, req, state)
     }
@@ -619,7 +625,7 @@ where
     match (m_if_mod_since, m_last_modified) {
         (Some(if_mod_since), Some(last_modified))
             if **if_mod_since > last_modified => m16(r, req, state),
-        _                                     => halt(StatusCode::NotModified)
+        _                                     => halt(StatusCode::NotModified, state)
     }
 }
 
@@ -675,7 +681,7 @@ where
     trace(state, "l07");
     match req.method() {
         Method::Post => m07(r, req, state),
-        _            => halt(StatusCode::NotFound)
+        _            => halt(StatusCode::NotFound, state)
     }
 }
 
@@ -688,7 +694,7 @@ where
     match r.moved_temporarily(state) {
         Some(location) => {
             set_response_header(state, Location::new(location));
-            halt(StatusCode::TemporaryRedirect)
+            halt(StatusCode::TemporaryRedirect, state)
         },
         None           => m05(r, req, state)
     }
@@ -706,8 +712,8 @@ where
     trace(state, "m20");
     match (r.delete_resource(state, req), r.delete_completed(state)) {
         (true, true)  => o20(r, req, state),
-        (true, false) => halt(StatusCode::Accepted),
-        _             => halt(StatusCode::InternalServerError)
+        (true, false) => halt(StatusCode::Accepted, state),
+        _             => halt(StatusCode::InternalServerError, state)
     }
 }
 
@@ -732,7 +738,7 @@ where
     trace(state, "m07");
     match r.allow_missing_post(state) {
         true  => n11(r, req, state),
-        false => halt(StatusCode::NotFound)
+        false => halt(StatusCode::NotFound, state)
     }
 }
 
@@ -745,7 +751,7 @@ where
     trace(state, "m05");
     match req.method() {
         Method::Post => n05(r, req, state),
-        _            => halt(StatusCode::Gone)
+        _            => halt(StatusCode::Gone, state)
     }
 }
 
@@ -783,7 +789,7 @@ where
     trace(state, "n05");
     match r.allow_missing_post(state) {
         true  => n11(r, req, state),
-        false => halt(StatusCode::Gone)
+        false => halt(StatusCode::Gone, state)
     }
 }
 
@@ -798,7 +804,7 @@ where
 {
     trace(state, "o20");
     match is_response_empty(state) {
-        true  => halt(StatusCode::Created),
+        true  => halt(StatusCode::Created, state),
         false => o18(r, req, state)
     }
 }
@@ -811,7 +817,7 @@ where
 {
     trace(state, "o18");
     if r.multiple_choices(state) {
-        halt(StatusCode::MultipleChoices)
+        halt(StatusCode::MultipleChoices, state)
     } else {
         match req.method() {
             // TODO: set expiration, etc. headers
@@ -827,7 +833,7 @@ where
                     });
                 set_response_header(state, ContentType(Mime::clone(&content_type)));
                 let response_body = body_fn(req);
-                get_response(state).set_body(response_body);
+                set_response_body(state, response_body);
             },
             _  => ()
         };
@@ -871,7 +877,7 @@ where
                     action(req);
                     o20(r, req, state)
                 },
-                None => halt(StatusCode::UnsupportedMediaType)
+                None => halt(StatusCode::UnsupportedMediaType, state)
             }
         },
         _ => o18(r, req, state)
@@ -885,7 +891,7 @@ where
 {
     trace(state, "o14");
     if r.is_conflict(state) {
-        halt(StatusCode::Conflict)
+        halt(StatusCode::Conflict, state)
     } else {
         let accepted = r.content_types_accepted(state);
         let result = req.headers().get::<ContentType>()
@@ -897,7 +903,7 @@ where
                 action(req);
                 p11(r, req, state)
             },
-            None => halt(StatusCode::UnsupportedMediaType)
+            None => halt(StatusCode::UnsupportedMediaType, state)
         }
     }
 }
@@ -913,7 +919,7 @@ where
 {
     trace(state, "p11");
     match req.headers().has::<Location>() {
-        true => halt(StatusCode::Created),
+        true => halt(StatusCode::Created, state),
         false => o20(r, req, state)
     }
 }
@@ -925,7 +931,7 @@ where
 {
     trace(state, "p03");
     if r.is_conflict(state) {
-        halt(StatusCode::Conflict)
+        halt(StatusCode::Conflict, state)
     } else {
         let accepted = r.content_types_accepted(state);
         let result = req.headers().get::<ContentType>()
@@ -937,7 +943,7 @@ where
                 action(req);
                 p11(r, req, state)
             },
-            None => halt(StatusCode::UnsupportedMediaType)
+            None => halt(StatusCode::UnsupportedMediaType, state)
         }
     }
 }
@@ -1045,13 +1051,13 @@ where
         PostResponse::PostCreate(ref path_segments) => {
             match create(r, req, state, path_segments) {
                 Some(()) => p11(r, req, state),
-                None => halt(StatusCode::UnsupportedMediaType)
+                None => halt(StatusCode::UnsupportedMediaType, state)
             }
         },
         PostResponse::PostCreateRedirect(ref path_segments) => {
             match create(r, req, state, path_segments) {
-                Some(()) => halt(StatusCode::SeeOther),
-                None => halt(StatusCode::UnsupportedMediaType)
+                Some(()) => halt(StatusCode::SeeOther, state),
+                None => halt(StatusCode::UnsupportedMediaType, state)
             }
         },
         PostResponse::PostProcess(accepted) => {
@@ -1064,7 +1070,7 @@ where
                     action(req);
                     p11(r, req, state)
                 },
-                None => halt(StatusCode::UnsupportedMediaType)
+                None => halt(StatusCode::UnsupportedMediaType, state)
             }
         },
         PostResponse::PostProcessRedirect(accepted) => {
@@ -1076,9 +1082,9 @@ where
                 Some(action) => {
                     let location = action(req);
                     set_response_header(state, Location::new(location));
-                    halt(StatusCode::SeeOther)
+                    halt(StatusCode::SeeOther, state)
                 },
-                None => halt(StatusCode::UnsupportedMediaType)
+                None => halt(StatusCode::UnsupportedMediaType, state)
             }
         }
     }

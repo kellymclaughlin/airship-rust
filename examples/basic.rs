@@ -1,4 +1,7 @@
+use std::time::{SystemTime, Duration};
+
 use hyper::{Body, Method, Request};
+use hyper::header::HttpDate;
 use mime;
 use mime::Mime;
 
@@ -20,6 +23,11 @@ impl Webmachine for GetResource {
             (mime::TEXT_PLAIN, |_x:&Request| Body::from("ok")),
             (mime::APPLICATION_JSON, |_x:&Request| Body::from("{\"key\": \"value\"}"))
         ]
+    }
+
+    fn last_modified<S: HasAirshipState>(&self, _state: &mut S) -> Option<HttpDate> {
+        let modified = SystemTime::now() - Duration::from_secs(60 * 60 * 24);
+        Some(modified.into())
     }
 }
 
