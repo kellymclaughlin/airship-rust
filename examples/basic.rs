@@ -5,17 +5,17 @@ use mime::Mime;
 use webmachine_derive::*;
 use airship::resource::{Resource, Webmachine};
 use airship::server;
-use airship::types::RequestState;
+use airship::types::{HasAirshipState, RequestState};
 
 #[derive(Clone)]
 struct GetResource;
 
 impl Webmachine for GetResource {
-    fn allowed_methods(&self) -> Vec<Method> {
+    fn allowed_methods<S: HasAirshipState>(&self, _state: &mut S) -> Vec<Method> {
         vec![Method::Get]
     }
 
-    fn content_types_provided(&self) -> Vec<(Mime, fn(&Request) -> Body)> {
+    fn content_types_provided<S: HasAirshipState>(&self, _state: &mut S) -> Vec<(Mime, fn(&Request) -> Body)> {
         vec![
             (mime::TEXT_PLAIN, |_x:&Request| Body::from("ok")),
             (mime::APPLICATION_JSON, |_x:&Request| Body::from("{\"key\": \"value\"}"))
@@ -36,5 +36,5 @@ fn main() {
         ("test </> place", MyResources::Get(GetResource {})),
         ("test </> route </> ::name::", MyResources::Res(Resource {})),
     ];
-    server::run(addr, &routes, &RequestState::new);
+    server::run::<MyResources, RequestState>(addr, &routes, &RequestState::new);
 }

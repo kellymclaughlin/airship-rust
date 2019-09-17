@@ -24,7 +24,7 @@ use crate::types::{
 header! { (AirshipTrace, "Airship-Trace") => [String] }
 header! { (AirshipQuip, "Airship-Quip") => [String] }
 
-type BoxedFuture = Box<Future<Item = Response, Error = hyper::Error>>;
+type BoxedFuture = Box<dyn Future<Item = Response, Error = hyper::Error>>;
 
 pub fn traverse<R, S>(
     r: &R,
@@ -84,7 +84,7 @@ where
     S: HasAirshipState
 {
     trace(state, "b13");
-    if r.service_available() {
+    if r.service_available(state) {
         b12(r, _req, state)
     } else {
         halt(StatusCode::ServiceUnavailable)
@@ -128,7 +128,7 @@ where
     S: HasAirshipState
 {
     trace(state, "b11");
-    match r.uri_too_long(req.uri()) {
+    match r.uri_too_long(state, req.uri()) {
         true => halt(StatusCode::UriTooLong),
         false => b10(r, req, state)
     }
@@ -145,7 +145,7 @@ where
 {
     trace(state, "b10");
     let request_method = req.method();
-    let allowed_methods = r.allowed_methods();
+    let allowed_methods = r.allowed_methods(state);
     match allowed_methods.iter().find(|&m| m == request_method) {
         None => halt_with_header(StatusCode::MethodNotAllowed, Allow(allowed_methods)),
         Some(_) => b09(r, req, state)
@@ -162,7 +162,7 @@ where
     S: HasAirshipState
 {
     trace(state, "b09");
-    match r.malformed_request(req) {
+    match r.malformed_request(state, req) {
         true => halt(StatusCode::BadRequest),
         false => b08(r, req, state)
     }
@@ -178,7 +178,7 @@ where
     S: HasAirshipState
 {
     trace(state, "b08");
-    match r.is_authorized(req) {
+    match r.is_authorized(state, req) {
         true => b07(r, req, state),
         false => halt(StatusCode::Unauthorized)
     }
@@ -194,7 +194,7 @@ where
     S: HasAirshipState
 {
     trace(state, "b07");
-    match r.forbidden(req) {
+    match r.forbidden(state, req) {
         true => halt(StatusCode::Forbidden),
         false => b06(r, req, state)
     }
@@ -210,7 +210,7 @@ where
     S: HasAirshipState
 {
     trace(state, "b06");
-    match r.valid_content_headers(req) {
+    match r.valid_content_headers(state, req) {
         true => b05(r, req, state),
         false => halt(StatusCode::NotImplemented)
     }
@@ -222,7 +222,7 @@ where
     S: HasAirshipState
 {
     trace(state, "b05");
-    match r.known_content_type(req) {
+    match r.known_content_type(state, req) {
         true => b04(r, req, state),
         false => halt(StatusCode::UnsupportedMediaType)
     }
@@ -234,7 +234,7 @@ where
     S: HasAirshipState
 {
     trace(state, "b04");
-    match r.entity_too_large(req) {
+    match r.entity_too_large(state, req) {
         true => halt(StatusCode::PayloadTooLarge),
         false => b03(r, req, state)
     }
@@ -248,7 +248,7 @@ where
     trace(state, "b03");
     match req.method() {
         Method::Options => {
-            let allowed_methods = r.allowed_methods();
+            let allowed_methods = r.allowed_methods(state);
             halt_with_header(StatusCode::NoContent, Allow(allowed_methods))
         },
         _ =>
@@ -266,7 +266,7 @@ where
     S: HasAirshipState
 {
     trace(state, "c04");
-    let provided = r.content_types_provided();
+    let provided = r.content_types_provided(state);
     let result = map_accept_media(provided, &accept_header);
     match result {
         Some(_) => {
@@ -300,7 +300,7 @@ where
     S: HasAirshipState
 {
     trace(state, "d05");
-    if r.language_available(accept_lang_header) {
+    if r.language_available(state, accept_lang_header) {
         e05(r, req, state)
     } else {
         halt(StatusCode::NotAcceptable)
@@ -420,7 +420,7 @@ where
 {
     trace(state, "g07");
     // TODO: set Vary headers
-    match r.resource_exists() {
+    match r.resource_exists(state) {
         true  => g08(r, req, state),
         false => h07(r, req, state)
     }
@@ -437,7 +437,7 @@ where
 {
     trace(state, "h12");
     let m_if_unmod_since = req.headers().get::<IfUnmodifiedSince>();
-    let m_last_modified = r.last_modified();
+    let m_last_modified = r.last_modified(state);
     match (m_if_unmod_since, m_last_modified) {
         (Some(if_unmod_since), Some(last_modified))
             if last_modified > **if_unmod_since => halt(StatusCode::PreconditionFailed),
@@ -535,7 +535,7 @@ where
     S: HasAirshipState
 {
     trace(state, "i04");
-    match r.moved_permanently() {
+    match r.moved_permanently(state) {
         Some(location) => {
             set_response_header(state, Location::new(location));
             halt(StatusCode::MovedPermanently)
@@ -583,7 +583,7 @@ where
     S: HasAirshipState
 {
     trace(state, "k07");
-    match r.previously_existed() {
+    match r.previously_existed(state) {
         true  => k05(r, req, state),
         false => l07(r, req, state)
     }
@@ -595,7 +595,7 @@ where
     S: HasAirshipState
 {
     trace(state, "k05");
-    match r.moved_permanently() {
+    match r.moved_permanently(state) {
         Some(location) => {
             set_response_header(state, Location::new(location));
             halt(StatusCode::MovedPermanently)
@@ -615,7 +615,7 @@ where
 {
     trace(state, "l17");
     let m_if_mod_since = req.headers().get::<IfModifiedSince>();
-    let m_last_modified = r.last_modified();
+    let m_last_modified = r.last_modified(state);
     match (m_if_mod_since, m_last_modified) {
         (Some(if_mod_since), Some(last_modified))
             if **if_mod_since > last_modified => m16(r, req, state),
@@ -685,7 +685,7 @@ where
     S: HasAirshipState
 {
     trace(state, "l05");
-    match r.moved_temporarily() {
+    match r.moved_temporarily(state) {
         Some(location) => {
             set_response_header(state, Location::new(location));
             halt(StatusCode::TemporaryRedirect)
@@ -704,7 +704,7 @@ where
     S: HasAirshipState
 {
     trace(state, "m20");
-    match (r.delete_resource(req), r.delete_completed()) {
+    match (r.delete_resource(state, req), r.delete_completed(state)) {
         (true, true)  => o20(r, req, state),
         (true, false) => halt(StatusCode::Accepted),
         _             => halt(StatusCode::InternalServerError)
@@ -730,7 +730,7 @@ where
     S: HasAirshipState
 {
     trace(state, "m07");
-    match r.allow_missing_post() {
+    match r.allow_missing_post(state) {
         true  => n11(r, req, state),
         false => halt(StatusCode::NotFound)
     }
@@ -771,7 +771,7 @@ where
     S: HasAirshipState
 {
     trace(state, "n11");
-    let post_response = r.process_post(req);
+    let post_response = r.process_post(state, req);
     process_post_action(r, req, state, post_response)
 }
 
@@ -781,7 +781,7 @@ where
     S: HasAirshipState
 {
     trace(state, "n05");
-    match r.allow_missing_post() {
+    match r.allow_missing_post(state) {
         true  => n11(r, req, state),
         false => halt(StatusCode::Gone)
     }
@@ -810,7 +810,7 @@ where
     S: HasAirshipState
 {
     trace(state, "o18");
-    if r.multiple_choices() {
+    if r.multiple_choices(state) {
         halt(StatusCode::MultipleChoices)
     } else {
         match req.method() {
@@ -823,7 +823,7 @@ where
                         // know there is at least one entry in the
                         // content_types_provided vector, but I want to confirm
                         // this is absolutlely the case.
-                        r.content_types_provided().first().unwrap().clone()
+                        r.content_types_provided(state).first().unwrap().clone()
                     });
                 set_response_header(state, ContentType(Mime::clone(&content_type)));
                 let response_body = body_fn(req);
@@ -831,10 +831,10 @@ where
             },
             _  => ()
         };
-        if let Some(etag) = r.generate_etag(req) {
+        if let Some(etag) = r.generate_etag(state, req) {
             set_response_header(state, ETag(etag));
         }
-        if let Some(modified) = r.last_modified() {
+        if let Some(modified) = r.last_modified(state) {
             set_response_header(state, LastModified(modified));
         }
         halt_with_response(StatusCode::Ok, state)
@@ -861,7 +861,7 @@ where
     trace(state, "o17");
     match req.method() {
         Method::Patch => {
-            let accepted = r.patch_content_types_accepted();
+            let accepted = r.patch_content_types_accepted(state);
             let result = req.headers().get::<ContentType>()
                 .and_then(|ct_hdr| {
                     map_content_media::<()>(accepted, ct_hdr)
@@ -884,10 +884,10 @@ where
     S: HasAirshipState
 {
     trace(state, "o14");
-    if r.is_conflict() {
+    if r.is_conflict(state) {
         halt(StatusCode::Conflict)
     } else {
-        let accepted = r.content_types_accepted();
+        let accepted = r.content_types_accepted(state);
         let result = req.headers().get::<ContentType>()
             .and_then(|ct_hdr| {
                 map_content_media::<()>(accepted, ct_hdr)
@@ -924,10 +924,10 @@ where
     S: HasAirshipState
 {
     trace(state, "p03");
-    if r.is_conflict() {
+    if r.is_conflict(state) {
         halt(StatusCode::Conflict)
     } else {
-        let accepted = r.content_types_accepted();
+        let accepted = r.content_types_accepted(state);
         let result = req.headers().get::<ContentType>()
             .and_then(|ct_hdr| {
                 map_content_media::<()>(accepted, ct_hdr)
@@ -1020,8 +1020,7 @@ where
 {
     let location = append_request_path(req, path_segments);
     set_response_header(state, Location::new(location));
-    let accepted = r.content_types_accepted();
-    // negotiate_content_types_accepted::<()>(&accepted, req);
+    let accepted = r.content_types_accepted(state);
     req.headers().get::<ContentType>()
         .and_then(|ct_hdr| {
             map_content_media::<()>(accepted, ct_hdr)

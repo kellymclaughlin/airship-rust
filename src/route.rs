@@ -58,10 +58,10 @@ fn bound_or_unbound_text(bou: &BoundOrUnbound) -> String {
 }
 
 #[derive(Clone)]
-pub struct RoutedResource<R: Webmachine>(pub Route, pub R);
+pub struct RoutedResource<R>(pub Route, pub R);
 
 #[derive(Clone)]
-pub enum RouteLeaf<R: Webmachine> {
+pub enum RouteLeaf<R> {
     RouteMatch(RoutedResource<R>, Vec<String>),
     RVar,
     RouteMatchOrVar(RoutedResource<R>, Vec<String>),
@@ -79,8 +79,8 @@ pub enum RouteLeaf<R: Webmachine> {
 /// 3. Repeat step 2 for every `var` encountered until the route
 ///    is completed and maps to a resource.
 #[derive(Clone)]
-pub struct RoutingSpec<'a, R: Webmachine>(pub Vec<(&'a str, R)>);
-pub struct RoutingTrie<R: Webmachine>(pub Trie<String, RouteLeaf<R>>);
+pub struct RoutingSpec<'a, R>(pub Vec<(&'a str, R)>);
+pub struct RoutingTrie<R>(pub Trie<String, RouteLeaf<R>>);
 
 impl<'a, R> From<RoutingSpec<'a, R>> for RoutingTrie<R>
 where
@@ -102,7 +102,12 @@ where
     }
 }
 
-fn route_leaves<R: Webmachine>(route_pair: (Route, R)) -> Vec<(String, RouteLeaf<R>)> {
+fn route_leaves<R>(
+    route_pair: (Route, R)
+) -> Vec<(String, RouteLeaf<R>)>
+where
+    R: Webmachine
+{
     let (route, resource) = route_pair;
     let fold_acc = (String::new(), Vec::new(), Vec::new(), false);
     let fold_res = route.0.iter().fold(fold_acc, route_fold_fun);
@@ -124,9 +129,13 @@ fn route_leaves<R: Webmachine>(route_pair: (Route, R)) -> Vec<(String, RouteLeaf
     routes
 }
 
-fn route_fold_fun<R: Webmachine>(fold_acc: (String, Vec<(String, RouteLeaf<R>)>, Vec<String>, bool),
-                  bou: &BoundOrUnbound
-) -> (String, Vec<(String, RouteLeaf<R>)>, Vec<String>, bool) {
+fn route_fold_fun<R>(
+    fold_acc: (String, Vec<(String, RouteLeaf<R>)>, Vec<String>, bool),
+    bou: &BoundOrUnbound
+) -> (String, Vec<(String, RouteLeaf<R>)>, Vec<String>, bool)
+where
+    R: Webmachine
+{
     if !fold_acc.3 {
         match bou {
             BoundOrUnbound::Bound(ref t) => {
@@ -155,28 +164,24 @@ fn route_fold_fun<R: Webmachine>(fold_acc: (String, Vec<(String, RouteLeaf<R>)>,
     }
 }
 
-/*
- * Custom version of Trie.fromList that resolves key conflicts
- * in the desired manner. In the case of duplicate routes the
- * routes specified first are favored over any subsequent
- * specifications.
- */
-fn to_trie<R: Webmachine>(route_leaves: Vec<(String, RouteLeaf<R>)>) -> Trie<String, RouteLeaf<R>> {
-    // L.foldl' insertOrReplace Trie.empty
-
+fn to_trie<R>(
+    route_leaves: Vec<(String, RouteLeaf<R>)>
+) -> Trie<String, RouteLeaf<R>>
+where
+    R: Webmachine
+{
     route_leaves
         .into_iter()
         .fold(Trie::new(), insert_or_replace)
-
-
-    // let (key, routes, vars, is_wild) = foldl routeFoldFun ("", [], [], false) (get_route k)
-    // unimplemented!()
 }
 
-fn insert_or_replace<R: Webmachine>(
+fn insert_or_replace<R>(
     mut t: Trie<String, RouteLeaf<R>>,
     kv: (String, RouteLeaf<R>),
-) -> Trie<String, RouteLeaf<R>> {
+) -> Trie<String, RouteLeaf<R>>
+where
+    R: Webmachine
+{
     let (key, new_value) = kv;
     match t.remove(&key) {
         Some(current_value) => {
@@ -188,7 +193,13 @@ fn insert_or_replace<R: Webmachine>(
     t
 }
 
-fn merge_values<R: Webmachine>(l1: RouteLeaf<R>, l2: RouteLeaf<R>) -> RouteLeaf<R> {
+fn merge_values<R>(
+    l1: RouteLeaf<R>,
+    l2: RouteLeaf<R>
+) -> RouteLeaf<R>
+where
+    R: Webmachine
+{
     match (l1, l2) {
         (RouteLeaf::Wildcard(x), _) => RouteLeaf::Wildcard(x),
         (_, RouteLeaf::Wildcard(y)) => RouteLeaf::Wildcard(y),
@@ -201,11 +212,6 @@ fn merge_values<R: Webmachine>(l1: RouteLeaf<R>, l2: RouteLeaf<R>) -> RouteLeaf<
         (_, v) => v,
     }
 }
-
-// -- | @a '</>' b@ separates the path components @a@ and @b@ with a slash.
-// -- This is actually just a synonym for 'mappend'.
-// (</>) :: Route -> Route -> Route
-// (</>) = (<>)
 
 // Represents the root resource (@/@) in a 'RoutingSpec'.
 pub fn root() -> Route {
@@ -229,15 +235,21 @@ pub fn star() -> Route {
     Route(vec![BoundOrUnbound::RestUnbound])
 }
 
-pub fn route<'a, R: Webmachine>(
+pub fn route<'a, R>(
     routes: &'a RoutingTrie<R>,
     path_info: String
-) -> Option<(&'a RoutedResource<R>, (HashMap<String, String>, Vec<String>))> {
+) -> Option<(&'a RoutedResource<R>, (HashMap<String, String>, Vec<String>))>
+where
+    R: Webmachine
+{
     let match_result = routes.0.prefix_match(&path_info);
     match_route(&routes.0, match_result, vec![], None)
 }
 
-fn dispatch_list(dispatch: Option<String>, matched: &String) -> Vec<String> {
+fn dispatch_list(
+    dispatch: Option<String>,
+    matched: &String
+) -> Vec<String> {
     let upd_dispatch = match dispatch {
         Some(path) => path + matched,
         None       => String::from("")
@@ -245,12 +257,15 @@ fn dispatch_list(dispatch: Option<String>, matched: &String) -> Vec<String> {
     upd_dispatch.split('/').map(|s| s.to_string()).collect()
 }
 
-fn match_route<'a, R: Webmachine>(
+fn match_route<'a, R>(
     routes: &'a Trie<String, RouteLeaf<R>>,
     matched: Option<(Box<String>, &'a RouteLeaf<R>, Box<String>)>,
     params: Vec<String>,
     dispatch: Option<String>,
-) -> Option<(&'a RoutedResource<R>, (HashMap<String, String>, Vec<String>))> {
+) -> Option<(&'a RoutedResource<R>, (HashMap<String, String>, Vec<String>))>
+where
+    R: Webmachine
+{
     match matched {
         // Nothing even partially matched the route
         None => {

@@ -143,6 +143,9 @@ fn impl_webmachine_enum_variants(
 
 fn impl_webmachine_enum_variant(name: &Ident, callback_method: &proc_macro2::TokenStream, trailing_args: &proc_macro2::TokenStream, variant: &Variant) -> proc_macro2::TokenStream {
     let id = &variant.ident;
+    let state = quote! {
+        , state
+    };
     match variant.fields {
         syn::Fields::Unnamed(ref fields) => {
             match fields.unnamed.len() {
@@ -153,7 +156,7 @@ fn impl_webmachine_enum_variant(name: &Ident, callback_method: &proc_macro2::Tok
                 1 => {
                     quote! {
                         #name::#id(ref inner) => {
-                            airship::resource::Webmachine::#callback_method(inner#trailing_args)
+                            airship::resource::Webmachine::#callback_method(inner#state#trailing_args)
                         }
                     }
                 }
@@ -181,7 +184,7 @@ fn impl_allow_missing_post(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn allow_missing_post(&self) -> bool {
+        fn allow_missing_post<S: airship::types::HasAirshipState>(&self, state: &mut S) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -203,7 +206,7 @@ fn impl_allowed_methods(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn allowed_methods(&self) -> Vec<Method> {
+        fn allowed_methods<S: airship::types::HasAirshipState>(&self, state: &mut S) -> Vec<Method> {
             match *self {
                 #(#variants)*
             }
@@ -225,7 +228,7 @@ fn impl_content_types_accepted(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn content_types_accepted(&self) -> Vec<(Mime, fn(&Request))> {
+        fn content_types_accepted<S: airship::types::HasAirshipState>(&self, state: &mut S) -> Vec<(Mime, fn(&Request))> {
             match *self {
                 #(#variants)*
             }
@@ -247,7 +250,7 @@ fn impl_content_types_provided(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn content_types_provided(&self) -> Vec<(Mime, fn(&Request) -> Body)> {
+        fn content_types_provided<S: airship::types::HasAirshipState>(&self, state: &mut S) -> Vec<(Mime, fn(&Request) -> Body)> {
             match *self {
                 #(#variants)*
             }
@@ -269,7 +272,7 @@ fn impl_delete_completed(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn delete_completed(&self) -> bool {
+        fn delete_completed<S: airship::types::HasAirshipState>(&self, state: &mut S) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -293,7 +296,7 @@ fn impl_delete_resource(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn delete_resource(&self, req: &Request) -> bool {
+        fn delete_resource<S: airship::types::HasAirshipState>(&self, state: &mut S, req: &Request) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -317,7 +320,7 @@ fn impl_entity_too_large(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn entity_too_large(&self, req: &Request) -> bool {
+        fn entity_too_large<S: airship::types::HasAirshipState>(&self, state: &mut S, req: &Request) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -341,7 +344,7 @@ fn impl_forbidden(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn forbidden(&self, req: &Request) -> bool {
+        fn forbidden<S: airship::types::HasAirshipState>(&self, state: &mut S, req: &Request) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -365,7 +368,7 @@ fn impl_generate_etag(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn generate_etag(&self, req: &Request) -> Option<hyper::header::EntityTag> {
+        fn generate_etag<S: airship::types::HasAirshipState>(&self, state: &mut S, req: &Request) -> Option<hyper::header::EntityTag> {
             match *self {
                 #(#variants)*
             }
@@ -387,7 +390,7 @@ fn impl_implemented(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn implemented(&self) -> bool {
+        fn implemented<S: airship::types::HasAirshipState>(&self, state: &mut S) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -411,7 +414,7 @@ fn impl_is_authorized(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn is_authorized(&self, req: &Request) -> bool {
+        fn is_authorized<S: airship::types::HasAirshipState>(&self, state: &mut S, req: &Request) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -433,7 +436,7 @@ fn impl_is_conflict(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn is_conflict(&self) -> bool {
+        fn is_conflict<S: airship::types::HasAirshipState>(&self, state: &mut S) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -457,7 +460,7 @@ fn impl_known_content_type(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn known_content_type(&self, req: &Request) -> bool {
+        fn known_content_type<S: airship::types::HasAirshipState>(&self, state: &mut S, req: &Request) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -479,7 +482,7 @@ fn impl_last_modified(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn last_modified(&self) -> Option<hyper::header::HttpDate> {
+        fn last_modified<S: airship::types::HasAirshipState>(&self, state: &mut S) -> Option<hyper::header::HttpDate> {
             match *self {
                 #(#variants)*
             }
@@ -503,7 +506,7 @@ fn impl_language_available(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn language_available<H: hyper::header::Header>(&self, accept_lang_header: &H) -> bool {
+        fn language_available<H: hyper::header::Header, S: airship::types::HasAirshipState>(&self, state: &mut S, accept_lang_header: &H) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -527,7 +530,7 @@ fn impl_malformed_request(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn malformed_request(&self, req: &Request) -> bool {
+        fn malformed_request<S: airship::types::HasAirshipState>(&self, state: &mut S, req: &Request) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -549,7 +552,7 @@ fn impl_moved_permanently(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn moved_permanently(&self) -> Option<String> {
+        fn moved_permanently<S: airship::types::HasAirshipState>(&self, state: &mut S) -> Option<String> {
             match *self {
                 #(#variants)*
             }
@@ -571,7 +574,7 @@ fn impl_moved_temporarily(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn moved_temporarily(&self) -> Option<String> {
+        fn moved_temporarily<S: airship::types::HasAirshipState>(&self, state: &mut S) -> Option<String> {
             match *self {
                 #(#variants)*
             }
@@ -593,7 +596,7 @@ fn impl_multiple_choices(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn multiple_choices(&self) -> bool {
+        fn multiple_choices<S: airship::types::HasAirshipState>(&self, state: &mut S) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -615,7 +618,7 @@ fn impl_patch_content_types_accepted(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn patch_content_types_accepted(&self) -> Vec<(Mime, fn(&Request))> {
+        fn patch_content_types_accepted<S: airship::types::HasAirshipState>(&self, state: &mut S) -> Vec<(Mime, fn(&Request))> {
             match *self {
                 #(#variants)*
             }
@@ -637,7 +640,7 @@ fn impl_previously_existed(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn previously_existed(&self) -> bool {
+        fn previously_existed<S: airship::types::HasAirshipState>(&self, state: &mut S) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -661,7 +664,7 @@ fn impl_process_post(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn process_post(&self, req: &Request) -> airship::resource::PostResponse {
+        fn process_post<S: airship::types::HasAirshipState>(&self, state: &mut S, req: &Request) -> airship::resource::PostResponse {
             match *self {
                 #(#variants)*
             }
@@ -683,7 +686,7 @@ fn impl_resource_exists(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn resource_exists(&self) -> bool {
+        fn resource_exists<S: airship::types::HasAirshipState>(&self, state: &mut S) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -705,7 +708,7 @@ fn impl_service_available(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn service_available(&self) -> bool {
+        fn service_available<S: airship::types::HasAirshipState>(&self, state: &mut S) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -729,7 +732,7 @@ fn impl_uri_too_long(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn uri_too_long(&self, uri: &hyper::Uri) -> bool {
+        fn uri_too_long<S: airship::types::HasAirshipState>(&self, state: &mut S, uri: &hyper::Uri) -> bool {
             match *self {
                 #(#variants)*
             }
@@ -753,7 +756,7 @@ fn impl_valid_content_headers(
         .map(|variant| impl_webmachine_enum_variant(name, &callback_method, &trailing_args, variant));
 
     quote! {
-        fn valid_content_headers(&self, req: &Request) -> bool {
+        fn valid_content_headers<S: airship::types::HasAirshipState>(&self, state: &mut S, req: &Request) -> bool {
             match *self {
                 #(#variants)*
             }
