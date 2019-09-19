@@ -2,8 +2,8 @@
 
 use std::time::SystemTime;
 
-use hyper::{Body, Request, Response};
 use hyper::header::*;
+use hyper::{Body, Request, Response};
 
 use mime::Mime;
 
@@ -15,7 +15,7 @@ pub struct AirshipState {
     pub decision_trace: Vec<String>,
     pub matched_content_type: Option<(Mime, fn(&Request) -> Body)>,
     pub response: Option<Response>,
-    pub request_time: SystemTime
+    pub request_time: SystemTime,
 }
 
 impl AirshipState {
@@ -25,7 +25,7 @@ impl AirshipState {
             decision_trace: vec![],
             matched_content_type: None,
             response: Some(Response::new()),
-            request_time: SystemTime::now()
+            request_time: SystemTime::now(),
         }
     }
 }
@@ -43,7 +43,7 @@ pub trait HasAirshipState {
 
 pub fn get_trace<S>(state: &S) -> &Vec<String>
 where
-    S: HasAirshipState
+    S: HasAirshipState,
 {
     let airship_state = state.get_airship_state();
     &airship_state.decision_trace
@@ -51,17 +51,17 @@ where
 
 pub fn trace<S>(state: &mut S, t: &str)
 where
-    S: HasAirshipState
+    S: HasAirshipState,
 {
     let airship_state = state.get_airship_state_mut();
     airship_state.decision_trace.push(String::from(t));
 }
 
 pub fn get_matched_content_type<S>(
-    state: &mut S
+    state: &mut S,
 ) -> &mut Option<(Mime, fn(&Request) -> Body)>
 where
-    S: HasAirshipState
+    S: HasAirshipState,
 {
     let airship_state = state.get_airship_state_mut();
     &mut airship_state.matched_content_type
@@ -69,22 +69,18 @@ where
 
 pub fn matched_content_type<S>(
     state: &mut S,
-    matched: Option<(Mime, fn(&Request) -> Body)>
-)
-where
-    S: HasAirshipState
+    matched: Option<(Mime, fn(&Request) -> Body)>,
+) where
+    S: HasAirshipState,
 {
     let airship_state = state.get_airship_state_mut();
     airship_state.matched_content_type = matched;
 }
 
-pub fn set_response_header<H, S>(
-    state: &mut S,
-    hdr: H
-)
+pub fn set_response_header<H, S>(state: &mut S, hdr: H)
 where
     H: Header,
-    S: HasAirshipState
+    S: HasAirshipState,
 {
     let airship_state = state.get_airship_state_mut();
     if let Some(resp) = &mut airship_state.response {
@@ -94,7 +90,7 @@ where
 
 pub fn request_time<S>(state: &S) -> HttpDate
 where
-    S: HasAirshipState
+    S: HasAirshipState,
 {
     let airship_state = state.get_airship_state();
     HttpDate::from(airship_state.request_time)
@@ -102,7 +98,7 @@ where
 
 pub fn is_response_empty<S>(state: &S) -> bool
 where
-    S: HasAirshipState
+    S: HasAirshipState,
 {
     let airship_state = state.get_airship_state();
     if let Some(resp) = &airship_state.response {
@@ -116,22 +112,17 @@ where
     }
 }
 
-pub fn get_response<S>(
-    state: &mut S
-) -> Response
+pub fn get_response<S>(state: &mut S) -> Response
 where
-    S: HasAirshipState
+    S: HasAirshipState,
 {
     let airship_state = state.get_airship_state_mut();
     airship_state.response.take().unwrap_or_else(Response::new)
 }
 
-pub fn set_response_body<S>(
-    state: &mut S,
-    body: Body
-)
+pub fn set_response_body<S>(state: &mut S, body: Body)
 where
-    S: HasAirshipState
+    S: HasAirshipState,
 {
     let airship_state = state.get_airship_state_mut();
     if let Some(resp) = &mut airship_state.response {

@@ -1,7 +1,7 @@
 #![allow(clippy::type_complexity)]
 
-use hyper::{Body, Method, Request, Uri};
 use hyper::header::*;
+use hyper::{Body, Method, Request, Uri};
 use mime;
 use mime::Mime;
 
@@ -20,7 +20,10 @@ pub trait Webmachine {
      * @HEAD@. If a request arrives with an HTTP method not included herein,
      * @501 Not Implemented@ is returned.
      */
-    fn allowed_methods<S: HasAirshipState>(&self, _state: &mut S) -> Vec<Method> {
+    fn allowed_methods<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+    ) -> Vec<Method> {
         vec![Method::Get, Method::Head, Method::Options]
     }
 
@@ -32,7 +35,10 @@ pub trait Webmachine {
      * halt with @415 Unsupported Media Type@. Otherwise, the corresponding
      * 'Webmachine' action will be executed and processing will continue.
      */
-    fn content_types_accepted<S: HasAirshipState>(&self, _state: &mut S) -> Vec<(Mime, fn(&Request))> {
+    fn content_types_accepted<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+    ) -> Vec<(Mime, fn(&Request))> {
         vec![]
     }
 
@@ -42,8 +48,11 @@ pub trait Webmachine {
      * matches the @Accept@ header. Should there be no match, processing
      * will halt with @406 Not Acceptable@.
      */
-    fn content_types_provided<S: HasAirshipState>(&self, _state: &mut S) -> Vec<(Mime, fn(&Request) -> Body)> {
-        vec![(mime::TEXT_PLAIN, |_x:&Request| Body::empty())]
+    fn content_types_provided<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+    ) -> Vec<(Mime, fn(&Request) -> Body)> {
+        vec![(mime::TEXT_PLAIN, |_x: &Request| Body::empty())]
     }
 
     /*
@@ -60,12 +69,20 @@ pub trait Webmachine {
      * When processing a @DELETE@ request, a @True@ value allows processing
      *  to continue. Returns @500 Forbidden@ if False. Default: false.
      */
-    fn delete_resource<S: HasAirshipState>(&self, _state: &mut S, _req: &Request) -> bool {
+    fn delete_resource<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+        _req: &Request,
+    ) -> bool {
         false
     }
 
     // Returns @413 Request Entity Too Large@ if true. Default: false.
-    fn entity_too_large<S: HasAirshipState>(&self, _state: &mut S, _req: &Request) -> bool {
+    fn entity_too_large<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+        _req: &Request,
+    ) -> bool {
         false
     }
 
@@ -73,7 +90,11 @@ pub trait Webmachine {
      * Checks if the given request is allowed to access this resource.
      * Returns @403 Forbidden@ if true. Default: false.
      */
-    fn forbidden<S: HasAirshipState>(&self, _state: &mut S, _req: &Request) -> bool {
+    fn forbidden<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+        _req: &Request,
+    ) -> bool {
         false
     }
 
@@ -81,7 +102,11 @@ pub trait Webmachine {
      * If this returns a non-'Nothing' 'ETag', its value will be added to
      * every HTTP response in the @ETag:@ field.
      */
-    fn generate_etag<S: HasAirshipState>(&self, _state: &mut S, _req: &Request) -> Option<EntityTag> {
+    fn generate_etag<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+        _req: &Request,
+    ) -> Option<EntityTag> {
         None
     }
 
@@ -92,7 +117,11 @@ pub trait Webmachine {
     }
 
     // Returns @401 Unauthorized@ if false. Default: true.
-    fn is_authorized<S: HasAirshipState>(&self, _state: &mut S, _req: &Request) -> bool {
+    fn is_authorized<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+        _req: &Request,
+    ) -> bool {
         true
     }
 
@@ -106,13 +135,20 @@ pub trait Webmachine {
 
     // Returns @415 Unsupported Media Type@ if false. We recommend you use the 'contentTypeMatches' helper functionfn which accepts a list of
     // 'MediaType' valuesfn so as to simplify proper MIME type handling. Default: true.
-    fn known_content_type<S: HasAirshipState>(&self, _state: &mut S, _req: &Request) -> bool {
+    fn known_content_type<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+        _req: &Request,
+    ) -> bool {
         true
     }
 
     // In the presence of an @If-Modified-Since@ headerfn returning a @Just@ value from 'lastModifed' allows
     // the server to halt with @304 Not Modified@ if appropriate.
-    fn last_modified<S: HasAirshipState>(&self, _state: &mut S) -> Option<HttpDate> {
+    fn last_modified<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+    ) -> Option<HttpDate> {
         None
     }
 
@@ -121,12 +157,20 @@ pub trait Webmachine {
      * function returns @False@, processing will halt with
      * @406 Not Acceptable@.
      */
-    fn language_available<H: Header, S: HasAirshipState>(&self, _state: &mut S, _accept_lang_header: &H) -> bool {
+    fn language_available<H: Header, S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+        _accept_lang_header: &H,
+    ) -> bool {
         true
     }
 
     // Returns @400 Bad Request@ if true. Default: false.
-    fn malformed_request<S: HasAirshipState>(&self, _state: &mut S, _req: &Request) -> bool {
+    fn malformed_request<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+        _req: &Request,
+    ) -> bool {
         false
     }
 
@@ -136,12 +180,18 @@ pub trait Webmachine {
      * @301 Moved Permanently@ response. The contained 'String' will be
      * added to the HTTP response under the @Location:@ header.
      */
-    fn moved_permanently<S: HasAirshipState>(&self, _state: &mut S) -> Option<String> {
+    fn moved_permanently<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+    ) -> Option<String> {
         None
     }
 
     // Like 'moved_permanently'fn except with a @307 Moved Temporarily@ response.
-    fn moved_temporarily<S: HasAirshipState>(&self, _state: &mut S) -> Option<String> {
+    fn moved_temporarily<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+    ) -> Option<String> {
         None
     }
 
@@ -157,7 +207,10 @@ pub trait Webmachine {
      * As 'contentTypesAccepted', but checked and executed specifically in
      * the case of a PATCH request.
      */
-    fn patch_content_types_accepted<S: HasAirshipState>(&self, _state: &mut S) -> Vec<(Mime, fn(&Request))> {
+    fn patch_content_types_accepted<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+    ) -> Vec<(Mime, fn(&Request))> {
         vec![]
     }
 
@@ -176,7 +229,11 @@ pub trait Webmachine {
      * The default implemetation returns a 'PostProcess' with an empty
      * handler.
      */
-    fn process_post<S: HasAirshipState>(&self, _state: &mut S, _req: &Request) -> PostResponse {
+    fn process_post<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+        _req: &Request,
+    ) -> PostResponse {
         PostResponse::PostProcess(vec![])
     }
 
@@ -196,12 +253,20 @@ pub trait Webmachine {
     }
 
     // Returns @414 Request URI Too Long@ if true. Default: false.
-    fn uri_too_long<S: HasAirshipState>(&self, _state: &mut S, _uri: &Uri) -> bool {
+    fn uri_too_long<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+        _uri: &Uri,
+    ) -> bool {
         false
     }
 
     // Returns @501 Not Implemented@ if false. Default: true.
-    fn valid_content_headers<S: HasAirshipState>(&self, _state: &mut S, _req: &Request) -> bool {
+    fn valid_content_headers<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+        _req: &Request,
+    ) -> bool {
         true
     }
 }
@@ -222,8 +287,7 @@ pub struct Resource;
 /// that this resource can accept in a request body.  If a `Content-Type` header
 /// is present but not accounted for, processing will halt with `415 Unsupported
 /// Media Type`.
-pub enum PostResponse
-{
+pub enum PostResponse {
     /// Treat this request as a `PUT`.
     PostCreate(Vec<String>),
     /// Treat this request as a `PUT`, then redirect.
@@ -231,5 +295,5 @@ pub enum PostResponse
     /// Process as a `POST`, but don't redirect.
     PostProcess(Vec<(Mime, fn(&Request))>),
     /// Process and redirect.
-    PostProcessRedirect(Vec<(Mime, fn(&Request) -> String)>)
+    PostProcessRedirect(Vec<(Mime, fn(&Request) -> String)>),
 }

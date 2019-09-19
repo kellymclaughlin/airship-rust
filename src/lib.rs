@@ -1,4 +1,5 @@
-#[macro_use] extern crate hyper;
+#[macro_use]
+extern crate hyper;
 
 pub mod decision;
 pub mod resource;

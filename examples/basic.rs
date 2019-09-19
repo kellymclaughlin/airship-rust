@@ -1,31 +1,42 @@
-use std::time::{SystemTime, Duration};
+use std::time::{Duration, SystemTime};
 
-use hyper::{Body, Method, Request};
 use hyper::header::HttpDate;
+use hyper::{Body, Method, Request};
 use mime;
 use mime::Mime;
 
-use webmachine_derive::*;
 use airship::resource::{Resource, Webmachine};
 use airship::server;
 use airship::types::{HasAirshipState, RequestState};
+use webmachine_derive::*;
 
 #[derive(Clone)]
 struct GetResource;
 
 impl Webmachine for GetResource {
-    fn allowed_methods<S: HasAirshipState>(&self, _state: &mut S) -> Vec<Method> {
+    fn allowed_methods<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+    ) -> Vec<Method> {
         vec![Method::Get]
     }
 
-    fn content_types_provided<S: HasAirshipState>(&self, _state: &mut S) -> Vec<(Mime, fn(&Request) -> Body)> {
+    fn content_types_provided<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+    ) -> Vec<(Mime, fn(&Request) -> Body)> {
         vec![
-            (mime::TEXT_PLAIN, |_x:&Request| Body::from("ok")),
-            (mime::APPLICATION_JSON, |_x:&Request| Body::from("{\"key\": \"value\"}"))
+            (mime::TEXT_PLAIN, |_x: &Request| Body::from("ok")),
+            (mime::APPLICATION_JSON, |_x: &Request| {
+                Body::from("{\"key\": \"value\"}")
+            }),
         ]
     }
 
-    fn last_modified<S: HasAirshipState>(&self, _state: &mut S) -> Option<HttpDate> {
+    fn last_modified<S: HasAirshipState>(
+        &self,
+        _state: &mut S,
+    ) -> Option<HttpDate> {
         let modified = SystemTime::now() - Duration::from_secs(60 * 60 * 24);
         Some(modified.into())
     }
@@ -35,7 +46,6 @@ impl Webmachine for GetResource {
 enum MyResources {
     Get(GetResource),
     Res(Resource),
-
 }
 
 fn main() {
