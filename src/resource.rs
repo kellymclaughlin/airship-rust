@@ -1,4 +1,4 @@
-#![allow(unused_variables)]
+#![allow(clippy::type_complexity)]
 
 use hyper::{Body, Method, Request, Uri};
 use hyper::header::*;
@@ -121,7 +121,7 @@ pub trait Webmachine {
      * function returns @False@, processing will halt with
      * @406 Not Acceptable@.
      */
-    fn language_available<H: Header, S: HasAirshipState>(&self, _state: &mut S, accept_lang_header: &H) -> bool {
+    fn language_available<H: Header, S: HasAirshipState>(&self, _state: &mut S, _accept_lang_header: &H) -> bool {
         true
     }
 

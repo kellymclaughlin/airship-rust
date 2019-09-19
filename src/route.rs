@@ -1,4 +1,4 @@
-#![allow(unused_variables)]
+#![allow(clippy::type_complexity)]
 
 use std::collections::HashMap;
 
@@ -248,7 +248,7 @@ where
 
 fn dispatch_list(
     dispatch: Option<String>,
-    matched: &String
+    matched: &str
 ) -> Vec<String> {
     let upd_dispatch = match dispatch {
         Some(path) => path + matched,
@@ -260,7 +260,7 @@ fn dispatch_list(
 fn match_route<'a, R>(
     routes: &'a Trie<String, RouteLeaf<R>>,
     matched: Option<(Box<String>, &'a RouteLeaf<R>, Box<String>)>,
-    params: Vec<String>,
+    mut params: Vec<String>,
     dispatch: Option<String>,
 ) -> Option<(&'a RoutedResource<R>, (HashMap<String, String>, Vec<String>))>
 where
@@ -275,7 +275,6 @@ where
         // The matched key is also a prefix of other routes, but the entire path
         // matched so handle like a RouteMatch.
         Some((ref matched_prefix, RouteLeaf::RouteMatchOrVar(r, vars), ref rest)) if rest.is_empty() => {
-            // match_route(routes, Some((matched_prefix, Some(&RouteLeaf::RouteMatch(r, vars)), rest)), params, dispatch),
             let dispatch_list = dispatch_list(dispatch, matched_prefix);
             let mut params_map = HashMap::new();
             let iter = vars.iter().zip(params.iter());
@@ -295,35 +294,29 @@ where
                 params_map.insert(v.clone(), p.clone());
             });
 
-        //TODO:
-        //     Just (r, (fromList $ zip vars ps, dispatchList dsp matched))
-        //     where
-        //         dispatchList (Just d) m = toTextList $ B.concat [d, m]
-        //         dispatchList Nothing _ = mempty
-            //         toTextList bs = decodeUtf8 <$> BC8.split '/' bs
             Some((r, (params_map, dispatch_list)))
         },
 
-        Some((ref _matched, RouteLeaf::RouteMatch(r, vars), _)) =>
+        Some((ref _matched, RouteLeaf::RouteMatch(_r, _vars), _)) =>
         // Part of the request path matched, but the trie value at the
         // matched prefix is not an RVar or RouteMatchOrVar so there is no
         // match.
             None,
 
-        Some((ref matched, RouteLeaf::RouteMatchOrVar(_r, _vars), ref rest)) =>
+        Some((ref _matched, RouteLeaf::RouteMatchOrVar(_r, _vars), ref _rest)) =>
         //  Part of the request path matched and the trie value at the
         //  matched prefix is a RouteMatchOrVar so handle it the same as if
         //  the value were RVar.
         //     matchRoute' routes (Just (matched, RVar, rest)) ps dsp
             None,
 
-        Some((ref matched, RouteLeaf::RVar, ref rest)) if rest.is_empty() =>
+        Some((ref _matched, RouteLeaf::RVar, ref rest)) if rest.is_empty() =>
             None,
 
-        Some((ref matched, RouteLeaf::RVar, ref rest)) if rest.starts_with("//") =>
+        Some((ref _matched, RouteLeaf::RVar, ref rest)) if rest.starts_with("//") =>
             None,
 
-        Some((ref matched, RouteLeaf::RVar, ref rest)) if rest.starts_with("/") => {
+        Some((ref matched, RouteLeaf::RVar, ref rest)) if rest.starts_with('/') => {
         // Part of the request path matched and the trie value at the
         // matched prefix is a RVar so calculate the key for the next part
             // of the route and continue attempting to match.
@@ -331,25 +324,18 @@ where
             let next_key: String = [encoded_match,
                                     rest.trim_start_matches('/').trim_start_matches(|m| m != '/').to_string()].concat();
 
-//         let nextKey = B.concat [ Base64.encode $ B.concat [matched, "var"]
-//                                , BC8.dropWhile (/='/') $ BC8.dropWhile (=='/') rest
-//                                ]
-//             updDsp = if isNothing dsp then Just mempty
-            //                      else dsp
             let updated_dispatch = dispatch.or_else(|| Some(String::from("")));
 //             paramVal = decodeUtf8 . BC8.takeWhile (/='/')
             //                        $ BC8.dropWhile (=='/') rest
             let mut trimmed_rest = rest.trim_start_matches('/').to_string();
-            let slash_offset = trimmed_rest.find('/').unwrap_or(trimmed_rest.len());
+            let slash_offset = trimmed_rest.find('/').unwrap_or_else(|| trimmed_rest.len());
             let param_val: String = trimmed_rest.drain(..slash_offset).collect();
-            //             matchRes = Trie.match routes nextKey
+            params.push(param_val);
             let match_result = routes.prefix_match(&next_key);
-        //         in matchRoute' routes matchRes (paramVal:ps) updDsp
             match_route(&routes, match_result, params, updated_dispatch)
         },
-        //     | otherwise = Nothing
 
-        Some((ref matched, RouteLeaf::RVar, ref rest)) => {
+        Some((ref _matched, RouteLeaf::RVar, ref _rest)) => {
             None
         },
 

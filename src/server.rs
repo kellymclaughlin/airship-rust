@@ -65,13 +65,13 @@ where
 
 pub fn run<R: 'static, S>(
     addr: SocketAddr,
-    routes: &Vec<(&str, R)>,
+    routes: &[(&str, R)],
     state_fun: &'static dyn Fn() -> S)
 where
     S: HasAirshipState,
     R: Webmachine + Clone,
 {
-    let routing_spec = RoutingSpec(routes.clone());
+    let routing_spec = RoutingSpec(routes.to_owned());
     let routing_trie = Arc::new(RoutingTrie::from(routing_spec));
     let server = Http::new()
         .bind(&addr, move || Ok(Airship::new(Arc::clone(&routing_trie), state_fun)))

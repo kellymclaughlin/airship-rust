@@ -2,6 +2,8 @@
 //! which is available
 //! [here](https://raw.githubusercontent.com/wiki/Webmachine/webmachine/images/http-headers-status-v3.png)
 
+#![allow(clippy::type_complexity)]
+
 use futures::Future;
 use hyper::{Body, Method, Request, Response, StatusCode};
 use hyper::header::*;
@@ -134,9 +136,10 @@ where
     S: HasAirshipState
 {
     trace(state, "b11");
-    match r.uri_too_long(state, req.uri()) {
-        true => halt(StatusCode::UriTooLong, state),
-        false => b10(r, req, state)
+    if r.uri_too_long(state, req.uri()) {
+        halt(StatusCode::UriTooLong, state)
+    } else {
+        b10(r, req, state)
     }
 }
 
@@ -168,9 +171,10 @@ where
     S: HasAirshipState
 {
     trace(state, "b09");
-    match r.malformed_request(state, req) {
-        true => halt(StatusCode::BadRequest, state),
-        false => b08(r, req, state)
+    if r.malformed_request(state, req) {
+        halt(StatusCode::BadRequest, state)
+    } else {
+        b08(r, req, state)
     }
 }
 
@@ -184,9 +188,10 @@ where
     S: HasAirshipState
 {
     trace(state, "b08");
-    match r.is_authorized(state, req) {
-        true => b07(r, req, state),
-        false => halt(StatusCode::Unauthorized, state)
+    if r.is_authorized(state, req) {
+        b07(r, req, state)
+    } else {
+        halt(StatusCode::Unauthorized, state)
     }
 }
 
@@ -200,9 +205,10 @@ where
     S: HasAirshipState
 {
     trace(state, "b07");
-    match r.forbidden(state, req) {
-        true => halt(StatusCode::Forbidden, state),
-        false => b06(r, req, state)
+    if r.forbidden(state, req) {
+        halt(StatusCode::Forbidden, state)
+    } else {
+        b06(r, req, state)
     }
 }
 
@@ -216,9 +222,10 @@ where
     S: HasAirshipState
 {
     trace(state, "b06");
-    match r.valid_content_headers(state, req) {
-        true => b05(r, req, state),
-        false => halt(StatusCode::NotImplemented, state)
+    if r.valid_content_headers(state, req) {
+        b05(r, req, state)
+    } else {
+        halt(StatusCode::NotImplemented, state)
     }
 }
 
@@ -228,9 +235,10 @@ where
     S: HasAirshipState
 {
     trace(state, "b05");
-    match r.known_content_type(state, req) {
-        true => b04(r, req, state),
-        false => halt(StatusCode::UnsupportedMediaType, state)
+    if r.known_content_type(state, req) {
+        b04(r, req, state)
+    } else {
+        halt(StatusCode::UnsupportedMediaType, state)
     }
 }
 
@@ -240,9 +248,10 @@ where
     S: HasAirshipState
 {
     trace(state, "b04");
-    match r.entity_too_large(state, req) {
-        true => halt(StatusCode::PayloadTooLarge, state),
-        false => b03(r, req, state)
+    if r.entity_too_large(state, req) {
+        halt(StatusCode::PayloadTooLarge, state)
+    } else {
+        b03(r, req, state)
     }
 }
 
@@ -383,15 +392,16 @@ where
 // -- G column
 // ------------------------------------------------------------------------------
 
-fn g11<R, S>(r: &R, req: &Request, state: &mut S, etags: &Vec<EntityTag>) -> BoxedFuture
+fn g11<R, S>(r: &R, req: &Request, state: &mut S, etags: &[EntityTag]) -> BoxedFuture
 where
     R: Webmachine,
     S: HasAirshipState
 {
     trace(state, "g11");
-    match etags.is_empty() {
-        true => halt(StatusCode::PreconditionFailed, state),
-        false => h10(r, req, state)
+    if etags.is_empty() {
+        halt(StatusCode::PreconditionFailed, state)
+    } else {
+        h10(r, req, state)
     }
 }
 
@@ -426,9 +436,10 @@ where
 {
     trace(state, "g07");
     // TODO: set Vary headers
-    match r.resource_exists(state) {
-        true  => g08(r, req, state),
-        false => h07(r, req, state)
+    if r.resource_exists(state) {
+        g08(r, req, state)
+    } else {
+        h07(r, req, state)
     }
 }
 
@@ -464,9 +475,10 @@ where
     //     None             => &false
     // };
     let valid_date = true;
-    match valid_date {
-        true  => h12(r, req, state),
-        false => i12(r, req, state)
+    if valid_date {
+        h12(r, req, state)
+    } else {
+        i12(r, req, state)
     }
 }
 
@@ -476,9 +488,10 @@ where
     S: HasAirshipState
 {
     trace(state, "h10");
-    match req.headers().has::<IfUnmodifiedSince>() {
-        true => h11(r, req, state),
-        false => i12(r, req, state)
+    if req.headers().has::<IfUnmodifiedSince>() {
+        h11(r, req, state)
+    } else {
+        i12(r, req, state)
     }
 }
 
@@ -571,15 +584,16 @@ where
 // -- K column
 // ------------------------------------------------------------------------------
 
-fn k13<R, S>(r: &R, req: &Request, state: &mut S, etags: &Vec<EntityTag>) -> BoxedFuture
+fn k13<R, S>(r: &R, req: &Request, state: &mut S, etags: &[EntityTag]) -> BoxedFuture
 where
     R: Webmachine,
     S: HasAirshipState
 {
     trace(state, "k13");
-    match etags.is_empty() {
-        true  => l13(r, req, state),
-        false => j18(r, req, state)
+    if etags.is_empty() {
+        l13(r, req, state)
+    } else {
+        j18(r, req, state)
     }
 }
 
@@ -589,9 +603,10 @@ where
     S: HasAirshipState
 {
     trace(state, "k07");
-    match r.previously_existed(state) {
-        true  => k05(r, req, state),
-        false => l07(r, req, state)
+    if r.previously_existed(state) {
+        k05(r, req, state)
+    } else {
+        l07(r, req, state)
     }
 }
 
@@ -655,9 +670,10 @@ where
     //     .and_then(str::parse::<HttpDate>())
     //     .is_some();
     let valid_date = true;
-    match valid_date {
-        true  => l15(r, req, state),
-        false => m16(r, req, state)
+    if valid_date {
+        l15(r, req, state)
+    } else {
+        m16(r, req, state)
     }
 }
 
@@ -667,9 +683,10 @@ where
     S: HasAirshipState
 {
     trace(state, "l13");
-    match req.headers().has::<IfModifiedSince>() {
-        true  => l14(r, req, state),
-        false => m16(r, req, state)
+    if req.headers().has::<IfModifiedSince>() {
+        l14(r, req, state)
+    } else {
+        m16(r, req, state)
     }
 }
 
@@ -736,9 +753,10 @@ where
     S: HasAirshipState
 {
     trace(state, "m07");
-    match r.allow_missing_post(state) {
-        true  => n11(r, req, state),
-        false => halt(StatusCode::NotFound, state)
+    if r.allow_missing_post(state) {
+        n11(r, req, state)
+    } else {
+        halt(StatusCode::NotFound, state)
     }
 }
 
@@ -787,9 +805,10 @@ where
     S: HasAirshipState
 {
     trace(state, "n05");
-    match r.allow_missing_post(state) {
-        true  => n11(r, req, state),
-        false => halt(StatusCode::Gone, state)
+    if r.allow_missing_post(state) {
+        n11(r, req, state)
+    } else {
+        halt(StatusCode::Gone, state)
     }
 }
 
@@ -803,9 +822,10 @@ where
     S: HasAirshipState
 {
     trace(state, "o20");
-    match is_response_empty(state) {
-        true  => halt(StatusCode::Created, state),
-        false => o18(r, req, state)
+    if is_response_empty(state) {
+        halt(StatusCode::Created, state)
+    } else {
+        o18(r, req, state)
     }
 }
 
@@ -918,9 +938,10 @@ where
     S: HasAirshipState
 {
     trace(state, "p11");
-    match req.headers().has::<Location>() {
-        true => halt(StatusCode::Created, state),
-        false => o20(r, req, state)
+    if req.headers().has::<Location>() {
+        halt(StatusCode::Created, state)
+    } else {
+        o20(r, req, state)
     }
 }
 
@@ -964,7 +985,7 @@ fn map_content_media<T>(
     // resource and look for a match.
     for (ct_hdr, action) in &provided {
         if ct_hdr == &content_type.0 {
-            action_match = Some(action.clone());
+            action_match = Some(*action);
             break;
         }
     }
@@ -989,14 +1010,12 @@ fn map_accept_media(
             // Iterate through all of the provided Content-Types for the
             // resource and find the match with the highest quality value.
             for (ct_hdr, body_fn) in &provided {
-                if a_hdr.item == mime::STAR_STAR && a_hdr.quality > match_quality {
-                    type_match = Some((ct_hdr.clone(), body_fn.clone()));
+                if (a_hdr.item == mime::STAR_STAR && a_hdr.quality > match_quality)
+                    || (a_hdr.item.type_() == ct_hdr.type_()
+                    && a_hdr.quality > match_quality
+                    && (a_hdr.item.subtype() == ct_hdr.subtype() || a_hdr.item.subtype() == mime::STAR)) {
+                    type_match = Some((ct_hdr.clone(), *body_fn));
                     match_quality = a_hdr.quality;
-                } else if a_hdr.item.type_() == ct_hdr.type_() && a_hdr.quality > match_quality {
-                    if a_hdr.item.subtype() == ct_hdr.subtype() || a_hdr.item.subtype() == mime::STAR {
-                        type_match = Some((ct_hdr.clone(), body_fn.clone()));
-                        match_quality = a_hdr.quality;
-                    }
                 }
             }
         }
@@ -1004,21 +1023,21 @@ fn map_accept_media(
     type_match
 }
 
-fn append_request_path(req: &Request, path_segments: &Vec<String>) -> String {
+fn append_request_path(req: &Request, path_segments: &[String]) -> String {
     let path_suffix: String =
         path_segments
         .iter()
         .cloned()
         .intersperse(",".to_string())
         .collect();
-    [req.path(), &path_suffix].concat().into()
+    [req.path(), &path_suffix].concat()
 }
 
 fn create<R, S>(
     r: &R,
     req: &Request,
     state: &mut S,
-    path_segments: &Vec<String>
+    path_segments: &[String]
 ) -> Option<()>
 where
     R: Webmachine,

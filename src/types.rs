@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 use std::time::SystemTime;
 
 use hyper::{Body, Request, Response};
@@ -25,6 +27,12 @@ impl AirshipState {
             response: Some(Response::new()),
             request_time: SystemTime::now()
         }
+    }
+}
+
+impl Default for AirshipState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -115,7 +123,7 @@ where
     S: HasAirshipState
 {
     let airship_state = state.get_airship_state_mut();
-    airship_state.response.take().unwrap_or_else(|| Response::new())
+    airship_state.response.take().unwrap_or_else(Response::new)
 }
 
 pub fn set_response_body<S>(
@@ -136,6 +144,12 @@ pub struct RequestState(AirshipState);
 impl RequestState {
     pub fn new() -> RequestState {
         RequestState(AirshipState::new())
+    }
+}
+
+impl Default for RequestState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
