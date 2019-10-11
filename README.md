@@ -2,8 +2,6 @@
 
 A Rust port of the [Airship](https://github.com/helium/airship.git) web framework. Airship itself was inspired by [Webmachine](https://github.com/webmachine/webmachine).
 
-This project is still under developement and is not ready for actual use.
-
 ## License
 
 This Source Code Form is subject to the terms of the Mozilla Public License, v.
